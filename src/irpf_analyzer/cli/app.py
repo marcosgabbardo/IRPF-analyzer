@@ -842,7 +842,7 @@ def _display_comparison(result) -> None:
             console.print("[blue]Novos Ativos:[/blue]")
             for h in new_assets[:3]:
                 console.print(
-                    f"  [blue]+[/blue] {h.descricao}: {format_currency(h.valor_ano_atual)}"
+                    f"  [blue]+[/blue] [dim]({h.grupo})[/dim] {h.descricao}: {format_currency(h.valor_ano_atual)}"
                 )
 
         if redeemed:
@@ -850,7 +850,7 @@ def _display_comparison(result) -> None:
             console.print("[cyan]Ativos Resgatados/Liquidados:[/cyan]")
             for h in redeemed[:3]:
                 console.print(
-                    f"  [cyan]↩[/cyan] {h.descricao}: {format_currency(h.valor_ano_anterior)}"
+                    f"  [cyan]↩[/cyan] [dim]({h.grupo})[/dim] {h.descricao}: {format_currency(h.valor_ano_anterior)}"
                 )
 
         if sold:
@@ -858,7 +858,7 @@ def _display_comparison(result) -> None:
             console.print("[yellow]Ativos Vendidos/Encerrados:[/yellow]")
             for h in sold[:3]:
                 console.print(
-                    f"  [yellow]-[/yellow] {h.descricao}: {format_currency(h.valor_ano_anterior)}"
+                    f"  [yellow]-[/yellow] [dim]({h.grupo})[/dim] {h.descricao}: {format_currency(h.valor_ano_anterior)}"
                 )
 
 
