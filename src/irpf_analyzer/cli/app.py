@@ -570,5 +570,319 @@ def checklist(
         raise typer.Exit(1)
 
 
+@app.command()
+def compare(
+    arquivo1: Annotated[
+        Path,
+        typer.Argument(
+            help="Primeiro arquivo .DEC ou .DBK",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    arquivo2: Annotated[
+        Path,
+        typer.Argument(
+            help="Segundo arquivo .DEC ou .DBK",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    output: Annotated[
+        str,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Formato de saída: table, json",
+        ),
+    ] = "table",
+) -> None:
+    """Compara duas declarações de anos diferentes mostrando evolução patrimonial."""
+    try:
+        from irpf_analyzer.core.analyzers.comparison import compare_declarations
+
+        # Parse both files
+        console.print()
+        console.print(f"[muted]Parseando {arquivo1.name}...[/muted]")
+        decl1 = parse_file(arquivo1)
+
+        console.print(f"[muted]Parseando {arquivo2.name}...[/muted]")
+        decl2 = parse_file(arquivo2)
+
+        console.print("[muted]Comparando declarações...[/muted]")
+        result = compare_declarations(decl1, decl2)
+
+        # JSON output
+        if output == "json":
+            import json
+            print(json.dumps(result.model_dump(), indent=2, default=str))
+            return
+
+        # Table output
+        _display_comparison(result)
+
+        print_success(f"Comparação {result.periodo_label} concluída!")
+
+    except ValueError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except ParseError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        print_error(f"Erro inesperado: {e}")
+        raise typer.Exit(1)
+
+
+def _display_comparison(result) -> None:
+    """Display comparison results using Rich tables and panels."""
+    from irpf_analyzer.core.models.comparison import ComparisonResult
+
+    result: ComparisonResult = result
+
+    # Header
+    console.print()
+    console.print(
+        Panel.fit(
+            f"[header]Contribuinte:[/header] {result.nome_contribuinte}\n"
+            f"[header]CPF:[/header] ***.***.***-{result.cpf[-2:]}\n"
+            f"[header]Período:[/header] {result.periodo_label}",
+            title="📊 Comparativo de Declarações IRPF",
+            border_style="blue",
+        )
+    )
+
+    # Warnings (if any)
+    if result.avisos:
+        console.print()
+        console.print("[yellow]⚠️  Avisos:[/yellow]")
+        for aviso in result.avisos:
+            console.print(f"  [yellow]•[/yellow] {aviso}")
+
+    # Income comparison
+    console.print()
+    console.print("[header]💰 Comparativo de Rendimentos:[/header]")
+    income_table = Table(show_header=True, header_style="bold")
+    income_table.add_column("Tipo", style="cyan")
+    income_table.add_column(str(result.ano_anterior), justify="right")
+    income_table.add_column(str(result.ano_atual), justify="right")
+    income_table.add_column("Variação", justify="right")
+
+    for item in [
+        result.rendimentos.total_tributaveis,
+        result.rendimentos.total_isentos,
+        result.rendimentos.total_exclusivos,
+    ]:
+        income_table.add_row(
+            item.campo,
+            format_currency(item.valor_anterior),
+            format_currency(item.valor_atual),
+            _format_variation(item.variacao_absoluta, item.variacao_percentual),
+        )
+
+    # Total row
+    total = result.rendimentos.total_geral
+    income_table.add_row("", "", "", "")  # Empty row
+    income_table.add_row(
+        f"[bold]{total.campo}[/bold]",
+        f"[bold]{format_currency(total.valor_anterior)}[/bold]",
+        f"[bold]{format_currency(total.valor_atual)}[/bold]",
+        _format_variation(total.variacao_absoluta, total.variacao_percentual, bold=True),
+    )
+    console.print(income_table)
+
+    # Deductions comparison
+    console.print()
+    console.print("[header]💊 Comparativo de Deduções:[/header]")
+    ded_table = Table(show_header=True, header_style="bold")
+    ded_table.add_column("Categoria", style="cyan")
+    ded_table.add_column(str(result.ano_anterior), justify="right")
+    ded_table.add_column(str(result.ano_atual), justify="right")
+    ded_table.add_column("Variação", justify="right")
+
+    deductions = [
+        result.deducoes.previdencia_oficial,
+        result.deducoes.previdencia_privada,
+        result.deducoes.despesas_medicas,
+        result.deducoes.despesas_educacao,
+        result.deducoes.pensao_alimenticia,
+        result.deducoes.dependentes,
+        result.deducoes.outras,
+    ]
+
+    for item in deductions:
+        # Skip zero values in both years
+        if item.valor_anterior == 0 and item.valor_atual == 0:
+            continue
+        ded_table.add_row(
+            item.campo,
+            format_currency(item.valor_anterior),
+            format_currency(item.valor_atual),
+            _format_variation(item.variacao_absoluta, item.variacao_percentual),
+        )
+
+    # Total deductions
+    total_ded = result.deducoes.total_deducoes
+    ded_table.add_row("", "", "", "")
+    ded_table.add_row(
+        f"[bold]{total_ded.campo}[/bold]",
+        f"[bold]{format_currency(total_ded.valor_anterior)}[/bold]",
+        f"[bold]{format_currency(total_ded.valor_atual)}[/bold]",
+        _format_variation(total_ded.variacao_absoluta, total_ded.variacao_percentual, bold=True),
+    )
+    console.print(ded_table)
+
+    # Patrimony comparison
+    console.print()
+    console.print("[header]🏠 Evolução Patrimonial:[/header]")
+
+    pat = result.patrimonio
+    console.print(
+        Panel.fit(
+            f"[header]Patrimônio Líquido {result.ano_anterior}:[/header] {format_currency(pat.patrimonio_liquido_ano_anterior)}\n"
+            f"[header]Patrimônio Líquido {result.ano_atual}:[/header] {format_currency(pat.patrimonio_liquido_ano_atual)}\n"
+            f"[header]Variação:[/header] {_format_variation(pat.patrimonio_liquido.variacao_absoluta, pat.patrimonio_liquido.variacao_percentual)}",
+            title="Patrimônio Líquido",
+            border_style="cyan",
+        )
+    )
+
+    # Patrimony by category
+    if pat.por_categoria:
+        console.print()
+        console.print("[header]Patrimônio por Categoria:[/header]")
+        cat_table = Table(show_header=True, header_style="bold")
+        cat_table.add_column("Categoria", style="cyan")
+        cat_table.add_column(str(result.ano_anterior), justify="right")
+        cat_table.add_column(str(result.ano_atual), justify="right")
+        cat_table.add_column("Variação", justify="right")
+
+        for cat_name, item in sorted(pat.por_categoria.items(), key=lambda x: -x[1].valor_atual):
+            cat_table.add_row(
+                cat_name,
+                format_currency(item.valor_anterior),
+                format_currency(item.valor_atual),
+                _format_variation(item.variacao_absoluta, item.variacao_percentual),
+            )
+
+        console.print(cat_table)
+
+    # Tax comparison
+    console.print()
+    console.print("[header]📋 Impacto Tributário:[/header]")
+    tax_table = Table(show_header=True, header_style="bold")
+    tax_table.add_column("Item", style="cyan")
+    tax_table.add_column(str(result.ano_anterior), justify="right")
+    tax_table.add_column(str(result.ano_atual), justify="right")
+    tax_table.add_column("Variação", justify="right")
+
+    tax_items = [
+        result.impostos.base_calculo,
+        result.impostos.imposto_devido,
+        result.impostos.imposto_pago,
+    ]
+
+    for item in tax_items:
+        tax_table.add_row(
+            item.campo,
+            format_currency(item.valor_anterior),
+            format_currency(item.valor_atual),
+            _format_variation(item.variacao_absoluta, item.variacao_percentual),
+        )
+
+    # Net tax (saldo)
+    saldo = result.impostos.saldo_imposto
+    saldo_ant_label = "restituição" if saldo.valor_anterior < 0 else "a pagar"
+    saldo_atu_label = "restituição" if saldo.valor_atual < 0 else "a pagar"
+
+    tax_table.add_row("", "", "", "")
+    tax_table.add_row(
+        "[bold]Resultado[/bold]",
+        f"[bold]{format_currency(abs(saldo.valor_anterior))}[/bold] ({saldo_ant_label})",
+        f"[bold]{format_currency(abs(saldo.valor_atual))}[/bold] ({saldo_atu_label})",
+        "",
+    )
+    console.print(tax_table)
+
+    # Asset highlights
+    if result.destaques_ativos:
+        console.print()
+        console.print("[header]🔍 Destaques de Ativos:[/header]")
+
+        gainers = [h for h in result.destaques_ativos if h.tipo == "gainer"]
+        losers = [h for h in result.destaques_ativos if h.tipo == "loser"]
+        new_assets = [h for h in result.destaques_ativos if h.tipo == "new"]
+        redeemed = [h for h in result.destaques_ativos if h.tipo == "redeemed"]
+        sold = [h for h in result.destaques_ativos if h.tipo == "sold"]
+
+        if gainers:
+            console.print()
+            console.print("[green]Maiores Valorizações:[/green]")
+            for h in gainers[:3]:
+                pct = f" ({h.variacao_percentual:+.1f}%)" if h.variacao_percentual else ""
+                console.print(
+                    f"  [green]▲[/green] {h.descricao}: {format_currency(h.variacao_absoluta)}{pct}"
+                )
+
+        if losers:
+            console.print()
+            console.print("[red]Maiores Desvalorizações:[/red]")
+            for h in losers[:3]:
+                pct = f" ({h.variacao_percentual:.1f}%)" if h.variacao_percentual else ""
+                console.print(
+                    f"  [red]▼[/red] {h.descricao}: {format_currency(h.variacao_absoluta)}{pct}"
+                )
+
+        if new_assets:
+            console.print()
+            console.print("[blue]Novos Ativos:[/blue]")
+            for h in new_assets[:3]:
+                console.print(
+                    f"  [blue]+[/blue] {h.descricao}: {format_currency(h.valor_ano_atual)}"
+                )
+
+        if redeemed:
+            console.print()
+            console.print("[cyan]Ativos Resgatados/Liquidados:[/cyan]")
+            for h in redeemed[:3]:
+                console.print(
+                    f"  [cyan]↩[/cyan] {h.descricao}: {format_currency(h.valor_ano_anterior)}"
+                )
+
+        if sold:
+            console.print()
+            console.print("[yellow]Ativos Vendidos/Encerrados:[/yellow]")
+            for h in sold[:3]:
+                console.print(
+                    f"  [yellow]-[/yellow] {h.descricao}: {format_currency(h.valor_ano_anterior)}"
+                )
+
+
+def _format_variation(absoluta, percentual, bold: bool = False) -> str:
+    """Format variation with color and percentage."""
+    from decimal import Decimal
+
+    if absoluta == 0:
+        return "[dim]-[/dim]"
+
+    color = "green" if absoluta > 0 else "red"
+    sign = "+" if absoluta > 0 else ""
+
+    if percentual is not None:
+        pct_str = f" ({sign}{percentual:.1f}%)"
+    else:
+        pct_str = " (novo)" if absoluta > 0 else ""
+
+    value = f"{sign}{format_currency(absoluta)}{pct_str}"
+
+    if bold:
+        return f"[bold {color}]{value}[/bold {color}]"
+    return f"[{color}]{value}[/{color}]"
+
+
 if __name__ == "__main__":
     app()
