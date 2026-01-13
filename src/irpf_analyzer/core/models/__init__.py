@@ -14,6 +14,12 @@ from irpf_analyzer.core.models.analysis import (
     Warning,
     Suggestion,
 )
+from irpf_analyzer.core.models.checklist import (
+    Document,
+    DocumentCategory,
+    DocumentChecklist,
+    DocumentPriority,
+)
 
 __all__ = [
     "Declaration",
@@ -32,4 +38,8 @@ __all__ = [
     "Inconsistency",
     "Warning",
     "Suggestion",
+    "Document",
+    "DocumentCategory",
+    "DocumentChecklist",
+    "DocumentPriority",
 ]

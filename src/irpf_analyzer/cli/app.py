@@ -320,5 +320,197 @@ def analyze(
         raise typer.Exit(1)
 
 
+@app.command()
+def report(
+    arquivo: Annotated[
+        Path,
+        typer.Argument(
+            help="Caminho para arquivo .DEC ou .DBK",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Caminho para arquivo PDF de saída",
+        ),
+    ] = None,
+    format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Formato de saída: pdf",
+        ),
+    ] = "pdf",
+) -> None:
+    """Gera relatório em PDF da análise da declaração."""
+    try:
+        from irpf_analyzer.infrastructure.reports import generate_pdf_report, REPORTLAB_AVAILABLE
+
+        if not REPORTLAB_AVAILABLE:
+            print_error(
+                "ReportLab não está instalado. "
+                "Instale com: uv sync --extra pdf ou pip install reportlab"
+            )
+            raise typer.Exit(1)
+
+        # Parse and analyze
+        console.print()
+        console.print(f"[muted]Parseando {arquivo.name}...[/muted]")
+        declaration = parse_dec_file(arquivo)
+
+        console.print("[muted]Executando análise de risco...[/muted]")
+        result = analyze_declaration(declaration)
+
+        # Determine output path
+        if output is None:
+            output = arquivo.with_suffix(".pdf")
+
+        console.print(f"[muted]Gerando relatório PDF...[/muted]")
+        generate_pdf_report(declaration, result, output)
+
+        print_success(f"Relatório gerado: {output}")
+
+    except ParseError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except ImportError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        print_error(f"Erro inesperado: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def checklist(
+    arquivo: Annotated[
+        Path,
+        typer.Argument(
+            help="Caminho para arquivo .DEC ou .DBK",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    output: Annotated[
+        str,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Formato de saída: table, json",
+        ),
+    ] = "table",
+) -> None:
+    """Gera checklist de documentos necessários baseado nos lançamentos."""
+    try:
+        from irpf_analyzer.core.services import generate_checklist
+        from irpf_analyzer.core.models import DocumentCategory, DocumentPriority
+
+        # Parse
+        console.print()
+        console.print(f"[muted]Parseando {arquivo.name}...[/muted]")
+        declaration = parse_dec_file(arquivo)
+
+        console.print("[muted]Gerando checklist de documentos...[/muted]")
+        checklist_result = generate_checklist(declaration)
+
+        # Display header
+        console.print()
+        console.print(
+            Panel.fit(
+                f"[header]Contribuinte:[/header] {declaration.contribuinte.nome}\n"
+                f"[header]Exercício:[/header] {declaration.ano_exercicio}\n"
+                f"[header]Total de documentos:[/header] {checklist_result.total_documentos}",
+                title="📋 Checklist de Documentos",
+                border_style="blue",
+            )
+        )
+
+        if output == "json":
+            import json
+            print(json.dumps(
+                [d.model_dump() for d in checklist_result.documentos],
+                indent=2,
+                default=str,
+            ))
+            return
+
+        # Group by category
+        categories = [
+            (DocumentCategory.RENDIMENTOS, "💰 Rendimentos", "green"),
+            (DocumentCategory.DEDUCOES, "💊 Deduções", "cyan"),
+            (DocumentCategory.BENS_DIREITOS, "🏠 Bens e Direitos", "yellow"),
+            (DocumentCategory.DEPENDENTES, "👥 Dependentes", "magenta"),
+            (DocumentCategory.ALIENACOES, "📈 Alienações/Vendas", "red"),
+        ]
+
+        for category, title, color in categories:
+            docs = checklist_result.by_category(category)
+            if not docs:
+                continue
+
+            console.print()
+            console.print(f"[bold {color}]{title}[/bold {color}]")
+
+            cat_table = Table(show_header=True, header_style="bold", expand=True)
+            cat_table.add_column("Documento", style="cyan", width=30)
+            cat_table.add_column("Descrição", width=40)
+            cat_table.add_column("Prioridade", justify="center", width=12)
+            cat_table.add_column("Referência", width=30)
+
+            priority_styles = {
+                DocumentPriority.OBRIGATORIO: "[bold red]OBRIGATÓRIO[/bold red]",
+                DocumentPriority.RECOMENDADO: "[yellow]RECOMENDADO[/yellow]",
+                DocumentPriority.OPCIONAL: "[dim]OPCIONAL[/dim]",
+            }
+
+            for doc in docs:
+                ref = doc.referencia or "-"
+                if doc.valor:
+                    ref = f"{ref}\n{doc.valor}" if ref != "-" else doc.valor
+
+                cat_table.add_row(
+                    doc.nome,
+                    doc.descricao,
+                    priority_styles.get(doc.prioridade, doc.prioridade.value),
+                    ref[:50] if ref else "-",
+                )
+
+            console.print(cat_table)
+
+        # Summary
+        console.print()
+        obrig = len(checklist_result.obrigatorios)
+        recom = len(checklist_result.recomendados)
+        opc = len(checklist_result.opcionais)
+
+        console.print(
+            Panel.fit(
+                f"[bold red]Obrigatórios:[/bold red] {obrig}\n"
+                f"[yellow]Recomendados:[/yellow] {recom}\n"
+                f"[dim]Opcionais:[/dim] {opc}",
+                title="Resumo",
+                border_style="blue",
+            )
+        )
+
+        print_success("Checklist gerado com base nos lançamentos da declaração!")
+
+    except ParseError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        print_error(f"Erro inesperado: {e}")
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()
