@@ -122,9 +122,15 @@ class PatrimonyFlowAnalysis(BaseModel):
     @property
     def percentual_despesas(self) -> int:
         """Return the percentage used for living expenses estimate."""
-        if self.renda_declarada > Decimal("200000"):
+        if self.renda_declarada > Decimal("500000"):
             return 30
-        return 50
+        elif self.renda_declarada > Decimal("250000"):
+            return 50
+        elif self.renda_declarada > Decimal("100000"):
+            return 65
+        elif self.renda_declarada > Decimal("50000"):
+            return 80
+        return 100
 
     @property
     def disclaimer_despesas(self) -> str:
@@ -132,8 +138,7 @@ class PatrimonyFlowAnalysis(BaseModel):
         pct = self.percentual_despesas
         return (
             f"Despesas de vida estimadas em {pct}% da renda declarada. "
-            f"Este é um valor conservador - contribuintes com renda acima de "
-            f"R$ 200.000 usam 30%, demais usam 50%."
+            f"Faixas: <50k=100%, 50-100k=80%, 100-250k=65%, 250-500k=50%, >500k=30%."
         )
 
 

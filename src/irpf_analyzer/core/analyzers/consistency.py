@@ -91,12 +91,18 @@ class ConsistencyAnalyzer:
 
         # === Calculate if resources explain patrimony variation ===
 
-        # Estimate living expenses (~30% of declared income for higher earners)
-        # This is conservative - assumes 70% of income is available for investment
-        if renda_declarada > Decimal("200000"):
+        # Estimate living expenses based on income brackets
+        # Higher income = lower percentage spent on living expenses
+        if renda_declarada > Decimal("500000"):
             despesas_vida = renda_declarada * Decimal("0.30")
-        else:
+        elif renda_declarada > Decimal("250000"):
             despesas_vida = renda_declarada * Decimal("0.50")
+        elif renda_declarada > Decimal("100000"):
+            despesas_vida = renda_declarada * Decimal("0.65")
+        elif renda_declarada > Decimal("50000"):
+            despesas_vida = renda_declarada * Decimal("0.80")
+        else:
+            despesas_vida = renda_declarada  # 100% - all income goes to expenses
 
         # Resources available after living expenses
         recursos_disponiveis = recursos_totais - despesas_vida
