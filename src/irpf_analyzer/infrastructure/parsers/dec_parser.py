@@ -263,10 +263,11 @@ class DECParser:
 
                 # Find the CPF position and work from there
                 if len(line) > 400:
-                    # These positions are approximate - need refinement
-                    totals["rendimentos_tributaveis"] = _parse_decimal(line[107:122])
-                    totals["imposto_devido"] = _parse_decimal(line[227:242])
-                    totals["imposto_pago"] = _parse_decimal(line[257:272])
+                    # Field positions based on DEC layout analysis:
+                    # Rendimentos tributáveis: 13-digit field at position 106
+                    totals["rendimentos_tributaveis"] = _parse_decimal(line[106:119])
+                    totals["imposto_devido"] = _parse_decimal(line[227:240])
+                    totals["imposto_pago"] = _parse_decimal(line[257:270])
 
                 break
 
@@ -490,20 +491,12 @@ class DECParser:
                                 break
 
                     # Try to extract ganho de capital value
-                    # Look for the pattern around position 600-700
                     ganho_capital = Decimal("0")
                     valor_alienacao = Decimal("0")
 
-                    # The value 38724480 appears multiple times - likely the sale proceeds
-                    # Let's look for a 13-digit value around position 600
-                    if len(line) >= 620:
-                        # Try different positions for valor alienação
-                        for pos in [600, 620, 640]:
-                            if len(line) >= pos + 13:
-                                valor = _parse_decimal(line[pos:pos+13])
-                                if valor > Decimal("1000"):  # Sanity check
-                                    valor_alienacao = valor
-                                    break
+                    # Valor alienação: 13-digit field at position 612 (right-aligned)
+                    if len(line) >= 625:
+                        valor_alienacao = _parse_decimal(line[612:625])
 
                     if nome:
                         alienacoes.append(Alienacao(

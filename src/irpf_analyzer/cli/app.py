@@ -11,8 +11,7 @@ from irpf_analyzer import __version__
 from irpf_analyzer.cli.console import console, print_error, print_success
 from irpf_analyzer.core.analyzers import analyze_declaration
 from irpf_analyzer.core.models import RiskLevel
-from irpf_analyzer.infrastructure.parsers.detector import detect_file_type, FileType
-from irpf_analyzer.infrastructure.parsers.dec_parser import parse_dec_file
+from irpf_analyzer.infrastructure.parsers import parse_file, detect_file_type, FileType
 from irpf_analyzer.shared.exceptions import ParseError
 from irpf_analyzer.shared.formatters import format_currency
 
@@ -136,7 +135,7 @@ def analyze(
         console.print(f"[muted]Parseando {arquivo.name}...[/muted]")
 
         # Parse the declaration
-        declaration = parse_dec_file(arquivo)
+        declaration = parse_file(arquivo)
 
         # Display header
         console.print()
@@ -234,21 +233,80 @@ def analyze(
         console.print("[muted]Executando análise de risco...[/muted]")
         result = analyze_declaration(declaration)
 
-        # Risk score panel with color based on level
+        # Patrimony Flow Analysis section
+        if result.patrimony_flow:
+            flow = result.patrimony_flow
+            console.print()
+            console.print("[header]📊 Análise de Fluxo Patrimonial:[/header]")
+
+            # Resources table
+            flow_table = Table(show_header=True, header_style="bold", title="Origem dos Recursos")
+            flow_table.add_column("Fonte", style="cyan")
+            flow_table.add_column("Valor", justify="right", style="green")
+
+            flow_table.add_row("Renda declarada (salário, pró-labore, etc.)", format_currency(flow.renda_declarada))
+            if flow.ganho_capital > 0:
+                flow_table.add_row("Ganho de capital (alienações)", format_currency(flow.ganho_capital))
+            if flow.lucro_acoes_exterior > 0:
+                flow_table.add_row("Lucro em ações estrangeiras", format_currency(flow.lucro_acoes_exterior))
+            if flow.valor_alienacoes > 0:
+                flow_table.add_row("Valor de vendas/alienações", format_currency(flow.valor_alienacoes))
+            if flow.ativos_liquidados > 0:
+                flow_table.add_row("Ativos liquidados (CDB, LCA, LCI)", format_currency(flow.ativos_liquidados))
+
+            flow_table.add_row("", "")  # Empty row
+            flow_table.add_row("[bold]TOTAL RECURSOS[/bold]", f"[bold]{format_currency(flow.recursos_totais)}[/bold]")
+
+            console.print(flow_table)
+
+            # Calculation panel
+            console.print()
+            saldo_style = "green" if flow.saldo >= 0 else "red"
+            status_explicado = "✅ EXPLICADO" if flow.explicado else "⚠️ NÃO EXPLICADO"
+            status_color = "green" if flow.explicado else "yellow"
+
+            console.print(
+                Panel.fit(
+                    f"[header]Recursos totais:[/header] {format_currency(flow.recursos_totais)}\n"
+                    f"[header](-) Despesas de vida estimadas:[/header] {format_currency(flow.despesas_vida_estimadas)}\n"
+                    f"[header](=) Recursos disponíveis:[/header] {format_currency(flow.recursos_disponiveis)}\n"
+                    f"[header](-) Variação patrimonial:[/header] {format_currency(flow.variacao_patrimonial)}\n"
+                    f"[header](=) Saldo:[/header] [{saldo_style}]{format_currency(flow.saldo)}[/{saldo_style}]\n\n"
+                    f"[{status_color}]{status_explicado}[/{status_color}]",
+                    title="Cálculo de Compatibilidade",
+                    border_style="cyan",
+                )
+            )
+
+            # Disclaimer
+            console.print(f"[dim]ℹ️  {flow.disclaimer_despesas}[/dim]")
+
+        # Risk score panel with color based on level (higher = safer)
         score_colors = {
-            RiskLevel.LOW: "green",
-            RiskLevel.MEDIUM: "yellow",
-            RiskLevel.HIGH: "red",
-            RiskLevel.CRITICAL: "bold red",
+            RiskLevel.LOW: "green",      # 80-100% = safe
+            RiskLevel.MEDIUM: "yellow",  # 50-79% = moderate
+            RiskLevel.HIGH: "red",       # 25-49% = risky
+            RiskLevel.CRITICAL: "bold red",  # 0-24% = critical
         }
         score_color = score_colors.get(result.risk_score.level, "white")
+
+        # Status message based on score
+        score = result.risk_score.score
+        if score >= 80:
+            status = "Excelente - Baixo risco de malha fina"
+        elif score >= 50:
+            status = "Atenção - Risco moderado"
+        elif score >= 25:
+            status = "Alerta - Risco elevado"
+        else:
+            status = "Crítico - Alto risco de malha fina"
 
         console.print()
         console.print(
             Panel.fit(
-                f"[{score_color}]Score: {result.risk_score.score}/100[/{score_color}]\n"
-                f"[{score_color}]Nível: {result.risk_score.level.value}[/{score_color}]",
-                title="🎯 Score de Risco - Malha Fina",
+                f"[{score_color}]Conformidade: {score}%[/{score_color}]\n"
+                f"[{score_color}]{status}[/{score_color}]",
+                title="🎯 Índice de Conformidade Fiscal",
                 border_style=score_color.replace("bold ", ""),
             )
         )
@@ -303,11 +361,11 @@ def analyze(
 
             console.print(sug_table)
 
-        # Final summary
+        # Final summary (higher score = safer)
         console.print()
-        if result.risk_score.score <= 20:
+        if result.risk_score.score >= 80:
             print_success("✅ Declaração com baixo risco de malha fina!")
-        elif result.risk_score.score <= 50:
+        elif result.risk_score.score >= 50:
             console.print("[yellow]⚠️  Declaração com risco moderado. Revise os pontos destacados.[/yellow]")
         else:
             console.print("[red]🚨 Declaração com alto risco! Atenção aos pontos críticos.[/red]")
@@ -363,7 +421,7 @@ def report(
         # Parse and analyze
         console.print()
         console.print(f"[muted]Parseando {arquivo.name}...[/muted]")
-        declaration = parse_dec_file(arquivo)
+        declaration = parse_file(arquivo)
 
         console.print("[muted]Executando análise de risco...[/muted]")
         result = analyze_declaration(declaration)
@@ -417,7 +475,7 @@ def checklist(
         # Parse
         console.print()
         console.print(f"[muted]Parseando {arquivo.name}...[/muted]")
-        declaration = parse_dec_file(arquivo)
+        declaration = parse_file(arquivo)
 
         console.print("[muted]Gerando checklist de documentos...[/muted]")
         checklist_result = generate_checklist(declaration)

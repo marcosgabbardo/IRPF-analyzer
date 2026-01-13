@@ -63,27 +63,78 @@ class Suggestion(BaseModel):
 
 
 class RiskScore(BaseModel):
-    """Risk score calculation result."""
+    """Risk score calculation result.
 
-    score: int = Field(..., ge=0, le=100, description="Risk score 0-100")
+    Score is 0-100 where:
+    - 100% = Fully compliant, very low risk of audit
+    - 0% = High risk, likely to be flagged for audit
+    """
+
+    score: int = Field(..., ge=0, le=100, description="Compliance score 0-100 (higher = safer)")
     level: RiskLevel = Field(..., description="Risk level classification")
     fatores: list[str] = Field(default_factory=list, description="Contributing factors")
 
     @classmethod
     def from_score(cls, score: int, fatores: list[str] | None = None) -> "RiskScore":
-        """Create RiskScore from numeric score."""
+        """Create RiskScore from numeric score (higher = safer)."""
         score = max(0, min(100, score))
 
-        if score <= 20:
+        # Higher score = lower risk
+        if score >= 80:
             level = RiskLevel.LOW
-        elif score <= 50:
+        elif score >= 50:
             level = RiskLevel.MEDIUM
-        elif score <= 75:
+        elif score >= 25:
             level = RiskLevel.HIGH
         else:
             level = RiskLevel.CRITICAL
 
         return cls(score=score, level=level, fatores=fatores or [])
+
+
+class PatrimonyFlowAnalysis(BaseModel):
+    """Detailed breakdown of patrimony variation vs available resources.
+
+    This shows how income, sales, and liquidated assets explain patrimony changes.
+    """
+
+    # Patrimony variation
+    patrimonio_anterior: Decimal = Field(default=Decimal("0"))
+    patrimonio_atual: Decimal = Field(default=Decimal("0"))
+    variacao_patrimonial: Decimal = Field(default=Decimal("0"))
+
+    # Income sources
+    renda_declarada: Decimal = Field(default=Decimal("0"), description="Salary, pro-labore, etc.")
+    ganho_capital: Decimal = Field(default=Decimal("0"), description="Capital gains from alienations")
+    lucro_acoes_exterior: Decimal = Field(default=Decimal("0"), description="Profit from foreign stocks")
+    valor_alienacoes: Decimal = Field(default=Decimal("0"), description="Sale proceeds")
+    ativos_liquidados: Decimal = Field(default=Decimal("0"), description="Matured CDB/LCA/LCI")
+
+    # Calculation
+    recursos_totais: Decimal = Field(default=Decimal("0"))
+    despesas_vida_estimadas: Decimal = Field(default=Decimal("0"))
+    recursos_disponiveis: Decimal = Field(default=Decimal("0"))
+
+    # Result
+    saldo: Decimal = Field(default=Decimal("0"), description="recursos_disponiveis - variacao")
+    explicado: bool = Field(default=True, description="True if resources explain variation")
+
+    @property
+    def percentual_despesas(self) -> int:
+        """Return the percentage used for living expenses estimate."""
+        if self.renda_declarada > Decimal("200000"):
+            return 30
+        return 50
+
+    @property
+    def disclaimer_despesas(self) -> str:
+        """Return explanation of how living expenses were calculated."""
+        pct = self.percentual_despesas
+        return (
+            f"Despesas de vida estimadas em {pct}% da renda declarada. "
+            f"Este é um valor conservador - contribuintes com renda acima de "
+            f"R$ 200.000 usam 30%, demais usam 50%."
+        )
 
 
 class AnalysisResult(BaseModel):
@@ -93,6 +144,9 @@ class AnalysisResult(BaseModel):
     inconsistencies: list[Inconsistency] = Field(default_factory=list)
     warnings: list[Warning] = Field(default_factory=list)
     suggestions: list[Suggestion] = Field(default_factory=list)
+    patrimony_flow: Optional[PatrimonyFlowAnalysis] = Field(
+        default=None, description="Detailed patrimony flow analysis"
+    )
 
     @property
     def total_inconsistencies(self) -> int:

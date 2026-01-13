@@ -1,10 +1,13 @@
 """Risk analyzer and score calculator for IRPF declarations."""
 
+from typing import Optional
+
 from irpf_analyzer.core.analyzers.consistency import ConsistencyAnalyzer
 from irpf_analyzer.core.analyzers.deductions import DeductionAnalyzer
 from irpf_analyzer.core.models.analysis import (
     AnalysisResult,
     Inconsistency,
+    PatrimonyFlowAnalysis,
     RiskLevel,
     RiskScore,
     Suggestion,
@@ -29,6 +32,7 @@ class RiskAnalyzer:
         self.inconsistencies: list[Inconsistency] = []
         self.warnings: list[Warning] = []
         self.suggestions: list[Suggestion] = []
+        self.patrimony_flow: Optional[PatrimonyFlowAnalysis] = None
 
     def analyze(self) -> AnalysisResult:
         """Run complete analysis and return result."""
@@ -47,6 +51,7 @@ class RiskAnalyzer:
             inconsistencies=self.inconsistencies,
             warnings=self.warnings,
             suggestions=self.suggestions,
+            patrimony_flow=self.patrimony_flow,
         )
 
     def _run_consistency_analysis(self) -> None:
@@ -55,6 +60,8 @@ class RiskAnalyzer:
         inconsistencies, warnings = analyzer.analyze()
         self.inconsistencies.extend(inconsistencies)
         self.warnings.extend(warnings)
+        # Capture patrimony flow analysis for reporting
+        self.patrimony_flow = analyzer.get_patrimony_flow()
 
     def _run_deduction_analysis(self) -> None:
         """Run deduction checks."""
@@ -137,28 +144,33 @@ class RiskAnalyzer:
                 )
 
     def _calculate_score(self) -> RiskScore:
-        """Calculate risk score from 0 (safe) to 100 (high risk)."""
-        score = 0
+        """Calculate compliance score from 100 (safe) to 0 (high risk).
+
+        Higher score = lower risk of being flagged for audit.
+        """
+        score = 100  # Start at maximum (fully compliant)
         fatores: list[str] = []
 
-        # Add points for inconsistencies
+        # Subtract points for inconsistencies
         for inconsistency in self.inconsistencies:
             points = self.RISK_POINTS.get(inconsistency.risco, 10)
-            score += points
-            fatores.append(f"{inconsistency.tipo.value}: +{points} pts")
+            score -= points
+            fatores.append(f"{inconsistency.tipo.value}: -{points} pts")
 
-        # Add points for warnings (half weight), skip informative ones
+        # Subtract points for warnings (half weight), skip informative ones
         for warning in self.warnings:
             if warning.informativo:
                 continue  # Don't count informative warnings in score
             points = self.RISK_POINTS.get(warning.risco, 5) // 2
-            score += points
+            score -= points
             if warning.campo:
-                fatores.append(f"Aviso em {warning.campo}: +{points} pts")
+                fatores.append(f"Aviso em {warning.campo}: -{points} pts")
 
-        # Base score adjustments
-        if not self.inconsistencies and not self.warnings:
-            fatores.append("Nenhuma inconsistência detectada")
+        # Perfect score message
+        if not self.inconsistencies and not any(
+            not w.informativo for w in self.warnings
+        ):
+            fatores.append("Nenhuma inconsistência detectada - declaração conforme")
 
         return RiskScore.from_score(score, fatores)
 

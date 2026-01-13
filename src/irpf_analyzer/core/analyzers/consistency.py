@@ -1,10 +1,12 @@
 """Consistency analyzer for IRPF declarations."""
 
 from decimal import Decimal
+from typing import Optional
 
 from irpf_analyzer.core.models.analysis import (
     Inconsistency,
     InconsistencyType,
+    PatrimonyFlowAnalysis,
     RiskLevel,
     Warning,
 )
@@ -24,6 +26,7 @@ class ConsistencyAnalyzer:
         self.declaration = declaration
         self.inconsistencies: list[Inconsistency] = []
         self.warnings: list[Warning] = []
+        self.patrimony_flow: Optional[PatrimonyFlowAnalysis] = None
 
     def analyze(self) -> tuple[list[Inconsistency], list[Warning]]:
         """Run all consistency checks."""
@@ -33,34 +36,110 @@ class ConsistencyAnalyzer:
 
         return self.inconsistencies, self.warnings
 
+    def get_patrimony_flow(self) -> Optional[PatrimonyFlowAnalysis]:
+        """Return the patrimony flow analysis (calculated during analyze())."""
+        return self.patrimony_flow
+
     def _check_patrimony_vs_income(self) -> None:
-        """Check if patrimony growth is compatible with declared income."""
+        """Check if patrimony growth is compatible with declared income and cash flows.
+
+        The logic is: all income sources + all liquidated assets should explain
+        the patrimony variation (plus reasonable living expenses).
+        """
         resumo = self.declaration.resumo_patrimonio
         variacao_patrimonio = resumo.variacao_patrimonial
 
-        # Get total declared income
-        renda_total = (
+        # === Calculate all sources of available resources ===
+
+        # 1. Declared income (salary, pro-labore, etc.)
+        renda_declarada = (
             self.declaration.total_rendimentos_tributaveis
             + self.declaration.total_rendimentos_isentos
             + self.declaration.total_rendimentos_exclusivos
         )
 
-        # Skip if income is zero or variation is small
-        if renda_total <= 0 or abs(variacao_patrimonio) < self.MIN_PATRIMONY_VARIATION:
+        # 2. Capital gains from alienations (sale of companies, properties, etc.)
+        ganho_capital = sum(
+            a.ganho_capital for a in self.declaration.alienacoes
+            if a.ganho_capital and a.ganho_capital > 0
+        )
+
+        # 3. Profit from foreign stocks declared within assets
+        lucro_acoes_exterior = sum(
+            b.lucro_prejuizo for b in self.declaration.bens_direitos
+            if b.lucro_prejuizo and b.lucro_prejuizo > 0
+        )
+
+        # 4. Sale proceeds from alienations (money received from sales)
+        valor_alienacoes = sum(
+            a.valor_alienacao for a in self.declaration.alienacoes
+            if a.valor_alienacao and a.valor_alienacao > 0
+        )
+
+        # 5. Liquidated assets (CDB, LCA, LCI that matured - money becomes available)
+        # These went from positive value to zero, releasing cash
+        ativos_liquidados = self._get_liquidated_assets_value()
+
+        # Total resources available for investment
+        recursos_totais = (
+            renda_declarada
+            + ganho_capital
+            + lucro_acoes_exterior
+            + valor_alienacoes
+            + ativos_liquidados
+        )
+
+        # === Calculate if resources explain patrimony variation ===
+
+        # Estimate living expenses (~30% of declared income for higher earners)
+        # This is conservative - assumes 70% of income is available for investment
+        if renda_declarada > Decimal("200000"):
+            despesas_vida = renda_declarada * Decimal("0.30")
+        else:
+            despesas_vida = renda_declarada * Decimal("0.50")
+
+        # Resources available after living expenses
+        recursos_disponiveis = recursos_totais - despesas_vida
+
+        # Calculate balance (positive = more resources than needed)
+        saldo = recursos_disponiveis - variacao_patrimonio
+        explicado = variacao_patrimonio <= recursos_disponiveis * Decimal("1.5")
+
+        # === Store the flow analysis for reporting ===
+        self.patrimony_flow = PatrimonyFlowAnalysis(
+            patrimonio_anterior=resumo.total_bens_anterior,
+            patrimonio_atual=resumo.total_bens_atual,
+            variacao_patrimonial=variacao_patrimonio,
+            renda_declarada=renda_declarada,
+            ganho_capital=ganho_capital,
+            lucro_acoes_exterior=lucro_acoes_exterior,
+            valor_alienacoes=valor_alienacoes,
+            ativos_liquidados=ativos_liquidados,
+            recursos_totais=recursos_totais,
+            despesas_vida_estimadas=despesas_vida,
+            recursos_disponiveis=recursos_disponiveis,
+            saldo=saldo,
+            explicado=explicado,
+        )
+
+        # Skip inconsistency check if variation is small
+        if abs(variacao_patrimonio) < self.MIN_PATRIMONY_VARIATION:
             return
 
-        # Patrimony increased more than income allows
+        # Skip if no resources declared
+        if recursos_totais <= 0:
+            return
+
+        # Patrimony variation should be explainable by available resources
+        # Allow some margin for timing differences, FX variations, etc. (1.5x threshold)
         if variacao_patrimonio > 0:
-            # Estimate maximum reasonable patrimony growth
-            # (income - estimated living expenses ~50%)
-            renda_disponivel = renda_total * Decimal("0.5")
+            if variacao_patrimonio > recursos_disponiveis * Decimal("1.5"):
+                # Calculate how much is unexplained
+                diferenca = variacao_patrimonio - recursos_disponiveis
 
-            if variacao_patrimonio > renda_disponivel * self.PATRIMONY_VARIATION_THRESHOLD:
-                ratio = (variacao_patrimonio / renda_disponivel) if renda_disponivel > 0 else Decimal("999")
-
-                if ratio > Decimal("3"):
+                if variacao_patrimonio > recursos_disponiveis * Decimal("3"):
                     risco = RiskLevel.HIGH
-                elif ratio > Decimal("2"):
+                elif variacao_patrimonio > recursos_disponiveis * Decimal("2"):
                     risco = RiskLevel.MEDIUM
                 else:
                     risco = RiskLevel.LOW
@@ -70,10 +149,10 @@ class ConsistencyAnalyzer:
                         tipo=InconsistencyType.PATRIMONIO_VS_RENDA,
                         descricao=(
                             f"Variação patrimonial (R$ {variacao_patrimonio:,.2f}) "
-                            f"superior à renda disponível estimada (R$ {renda_disponivel:,.2f})"
+                            f"superior aos recursos disponíveis estimados (R$ {recursos_disponiveis:,.2f})"
                         ),
                         valor_declarado=variacao_patrimonio,
-                        valor_esperado=renda_disponivel,
+                        valor_esperado=recursos_disponiveis,
                         risco=risco,
                         recomendacao=(
                             "Verifique se há rendimentos não declarados ou "
@@ -81,6 +160,61 @@ class ConsistencyAnalyzer:
                         ),
                     )
                 )
+
+    def _get_liquidated_assets_value(self) -> Decimal:
+        """Get total value of assets that went to zero (matured/liquidated).
+
+        These represent cash that became available for reinvestment:
+        - CDB, LCA, LCI that matured
+        - Other fixed income that was redeemed
+        - Investment fund quotas that were sold
+
+        Note: Foreign stocks that went to zero are handled separately
+        (they have lucro_prejuizo declared).
+        """
+        total = Decimal("0")
+
+        for bem in self.declaration.bens_direitos:
+            # Asset went from positive to zero
+            if bem.situacao_anterior > 0 and bem.situacao_atual == 0:
+                # Skip foreign stocks (handled via lucro_prejuizo)
+                if self._is_foreign_stock(bem):
+                    continue
+
+                # Skip if there's a matching alienation (already counted)
+                if self._has_matching_alienation(bem):
+                    continue
+
+                # Include fixed income and similar assets
+                if self._is_liquidatable_asset(bem):
+                    total += bem.situacao_anterior
+
+        return total
+
+    def _is_liquidatable_asset(self, bem) -> bool:
+        """Check if asset type can be liquidated/matured releasing cash."""
+        descricao_upper = bem.discriminacao.upper()
+
+        # Fixed income products
+        fixed_income_keywords = [
+            "CDB", "LCA", "LCI", "LF ",
+            "RENDA FIXA", "TESOURO", "DEBENTURE", "DEBÊNTURE",
+            "APLICACAO", "APLICAÇÃO", "FUNDO",
+        ]
+        for keyword in fixed_income_keywords:
+            if keyword in descricao_upper:
+                return True
+
+        # Investment groups that can be redeemed
+        from irpf_analyzer.core.models.enums import GrupoBem
+        redeemable_groups = [
+            GrupoBem.APLICACOES_FINANCEIRAS,
+            GrupoBem.FUNDOS,
+        ]
+        if bem.grupo in redeemable_groups:
+            return True
+
+        return False
 
     def _check_patrimony_variation(self) -> None:
         """Check for suspicious patrimony variations."""

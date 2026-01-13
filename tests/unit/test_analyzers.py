@@ -192,8 +192,8 @@ class TestDeductionAnalyzer:
 class TestRiskAnalyzer:
     """Tests for RiskAnalyzer."""
 
-    def test_low_risk_score(self):
-        """Test that clean declaration gets low risk score."""
+    def test_high_compliance_score(self):
+        """Test that clean declaration gets high compliance score (100% = safe)."""
         decl = Declaration(
             contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
             ano_exercicio=2025,
@@ -213,11 +213,12 @@ class TestRiskAnalyzer:
 
         result = analyze_declaration(decl)
 
-        assert result.risk_score.score <= 20
+        # Higher score = safer (less risk of audit)
+        assert result.risk_score.score >= 80
         assert result.risk_score.level == RiskLevel.LOW
 
-    def test_high_risk_score_with_issues(self):
-        """Test that declaration with issues gets higher risk score."""
+    def test_low_compliance_score_with_issues(self):
+        """Test that declaration with issues gets lower compliance score."""
         decl = Declaration(
             contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
             ano_exercicio=2025,
@@ -245,7 +246,8 @@ class TestRiskAnalyzer:
 
         result = analyze_declaration(decl)
 
-        assert result.risk_score.score > 20
+        # Lower score = higher risk of audit
+        assert result.risk_score.score < 80
         assert len(result.inconsistencies) > 0
 
     def test_generates_suggestions(self):

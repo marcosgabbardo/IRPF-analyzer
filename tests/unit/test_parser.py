@@ -1,4 +1,4 @@
-"""Tests for DEC file parser."""
+"""Tests for DEC and DBK file parsers."""
 
 from decimal import Decimal
 from pathlib import Path
@@ -11,6 +11,8 @@ from irpf_analyzer.infrastructure.parsers.dec_parser import (
     _parse_decimal,
     _parse_date,
 )
+from irpf_analyzer.infrastructure.parsers.dbk_parser import DBKParser, parse_dbk_file
+from irpf_analyzer.infrastructure.parsers import parse_file, detect_file_type, FileType
 from irpf_analyzer.core.models.enums import TipoDeclaracao, TipoDependente, TipoDeducao
 
 
@@ -172,3 +174,102 @@ class TestDECParser:
 
         with pytest.raises(CorruptedFileError):
             parse_dec_file(empty_file)
+
+
+class TestDBKParser:
+    """Tests for DBKParser class."""
+
+    @pytest.fixture
+    def real_dbk_path(self) -> Path:
+        """Path to real DBK file for testing."""
+        return Path(__file__).parent.parent / "fixtures" / "83158073072-IRPF-A-2025-2024-ORIGI.DBK"
+
+    def test_parse_real_dbk_file(self, real_dbk_path: Path):
+        """Test parsing real DBK file."""
+        if not real_dbk_path.exists():
+            pytest.skip("Real DBK file not available")
+
+        declaration = parse_dbk_file(real_dbk_path)
+
+        # Basic info should match DEC file
+        assert declaration.ano_exercicio == 2025
+        assert declaration.ano_calendario == 2024
+        assert declaration.contribuinte.nome == "MARCOS D AVILA GABBARDO"
+        assert declaration.contribuinte.cpf == "83158073072"
+        assert declaration.tipo_declaracao == TipoDeclaracao.COMPLETA
+
+        # DBK files should not have receipt number
+        assert declaration.numero_recibo is None
+
+    def test_dbk_has_same_data_as_dec(self, real_dbk_path: Path):
+        """Test that DBK file has same core data as DEC file."""
+        dec_path = real_dbk_path.with_suffix(".DEC")
+
+        if not real_dbk_path.exists() or not dec_path.exists():
+            pytest.skip("Real DBK/DEC files not available")
+
+        dbk_decl = parse_dbk_file(real_dbk_path)
+        dec_decl = parse_dec_file(dec_path)
+
+        # Core data should match
+        assert dbk_decl.contribuinte.cpf == dec_decl.contribuinte.cpf
+        assert dbk_decl.contribuinte.nome == dec_decl.contribuinte.nome
+        assert dbk_decl.ano_exercicio == dec_decl.ano_exercicio
+        assert dbk_decl.total_rendimentos_tributaveis == dec_decl.total_rendimentos_tributaveis
+        assert len(dbk_decl.dependentes) == len(dec_decl.dependentes)
+        assert len(dbk_decl.deducoes) == len(dec_decl.deducoes)
+
+
+class TestUnifiedParser:
+    """Tests for unified parse_file function."""
+
+    @pytest.fixture
+    def dec_path(self) -> Path:
+        return Path(__file__).parent.parent / "fixtures" / "83158073072-IRPF-A-2025-2024-ORIGI.DEC"
+
+    @pytest.fixture
+    def dbk_path(self) -> Path:
+        return Path(__file__).parent.parent / "fixtures" / "83158073072-IRPF-A-2025-2024-ORIGI.DBK"
+
+    def test_detect_dec_file(self, dec_path: Path):
+        """Test DEC file type detection."""
+        if not dec_path.exists():
+            pytest.skip("DEC file not available")
+
+        file_type = detect_file_type(dec_path)
+        assert file_type == FileType.DEC
+
+    def test_detect_dbk_file(self, dbk_path: Path):
+        """Test DBK file type detection."""
+        if not dbk_path.exists():
+            pytest.skip("DBK file not available")
+
+        file_type = detect_file_type(dbk_path)
+        assert file_type == FileType.DBK
+
+    def test_parse_file_dec(self, dec_path: Path):
+        """Test parse_file with DEC file."""
+        if not dec_path.exists():
+            pytest.skip("DEC file not available")
+
+        declaration = parse_file(dec_path)
+        assert declaration.contribuinte.cpf == "83158073072"
+
+    def test_parse_file_dbk(self, dbk_path: Path):
+        """Test parse_file with DBK file."""
+        if not dbk_path.exists():
+            pytest.skip("DBK file not available")
+
+        declaration = parse_file(dbk_path)
+        assert declaration.contribuinte.cpf == "83158073072"
+        assert declaration.numero_recibo is None
+
+    def test_unsupported_file_raises(self, tmp_path: Path):
+        """Test that unsupported file extension raises error."""
+        from irpf_analyzer.shared.exceptions import UnsupportedFileError
+
+        unsupported_file = tmp_path / "test.txt"
+        unsupported_file.write_text("test")
+
+        with pytest.raises(UnsupportedFileError):
+            parse_file(unsupported_file)
