@@ -101,11 +101,18 @@ class PatternAnalyzer:
 
         Deductions with very "round" values (R$ 1,000, R$ 5,000) may
         indicate estimated or fabricated amounts.
+
+        Note: Medical expenses are excluded because healthcare providers
+        typically charge round values (R$ 500, R$ 550, etc.).
         """
-        valores_deducao = [d.valor for d in self.declaration.deducoes if d.valor > 0]
+        # Exclude medical expenses - doctors typically charge round values
+        valores_deducao = [
+            d.valor for d in self.declaration.deducoes
+            if d.valor > 0 and d.tipo != TipoDeducao.DESPESAS_MEDICAS
+        ]
 
         if len(valores_deducao) < 3:
-            return  # Need at least 3 deductions
+            return  # Need at least 3 non-medical deductions
 
         redondos = detectar_valores_redondos(valores_deducao)
 

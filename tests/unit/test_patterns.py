@@ -25,7 +25,11 @@ class TestRoundValues:
     """Tests for round value detection."""
 
     def test_detects_round_values_in_deductions(self):
-        """Test detection of suspiciously round deduction values."""
+        """Test detection of suspiciously round deduction values.
+
+        Note: Medical expenses are excluded from this check because healthcare
+        providers typically charge round values (R$ 500, R$ 550, etc.).
+        """
         decl = Declaration(
             contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
             ano_exercicio=2025,
@@ -33,10 +37,11 @@ class TestRoundValues:
             tipo_declaracao=TipoDeclaracao.COMPLETA,
             total_rendimentos_tributaveis=Decimal("100000"),
             deducoes=[
-                Deducao(tipo=TipoDeducao.DESPESAS_MEDICAS, valor=Decimal("1000")),
-                Deducao(tipo=TipoDeducao.DESPESAS_MEDICAS, valor=Decimal("2000")),
-                Deducao(tipo=TipoDeducao.DESPESAS_MEDICAS, valor=Decimal("5000")),
-                Deducao(tipo=TipoDeducao.DESPESAS_EDUCACAO, valor=Decimal("3000")),
+                # Use non-medical expenses (education, pension, other)
+                Deducao(tipo=TipoDeducao.DESPESAS_EDUCACAO, valor=Decimal("1000")),
+                Deducao(tipo=TipoDeducao.DESPESAS_EDUCACAO, valor=Decimal("2000")),
+                Deducao(tipo=TipoDeducao.PREVIDENCIA_PRIVADA, valor=Decimal("5000")),
+                Deducao(tipo=TipoDeducao.OUTROS, valor=Decimal("3000")),
             ],
         )
 
