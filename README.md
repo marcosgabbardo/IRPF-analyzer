@@ -33,7 +33,17 @@ Uma ferramenta CLI em Python para analisar arquivos `.DEC` e `.DBK` (declaraçõ
 
 - **Sugestões de Otimização**
   - Comparativo declaração completa vs simplificada
-  - Oportunidades de dedução PGBL
+  - Oportunidades de dedução PGBL (até 12% da renda bruta)
+  - Doações incentivadas (até 6% do IR devido)
+  - Verificação de despesas com educação
+  - Livro-caixa para profissionais autônomos
+
+- **Comparativo Ano-a-Ano**
+  - Comparação entre duas declarações de anos diferentes
+  - Evolução patrimonial detalhada
+  - Variação de rendimentos e deduções
+  - Impacto tributário comparado
+  - Destaques de ativos (valorizações, vendas, novos)
 
 - **Relatórios PDF Completos**
   - Exportação para PDF com todas as informações
@@ -238,6 +248,71 @@ irpf-analyzer checklist seu-arquivo.DEC
 ╰────────────────────────────────────────╯
 ```
 
+### Comparativo Ano-a-Ano
+
+```bash
+irpf-analyzer compare 2024.DEC 2025.DEC
+```
+
+Compara duas declarações de anos diferentes, mostrando:
+
+**Exemplo de saída:**
+
+```
+╭──────────────────────────────────────────────────────╮
+│ 📊 Comparativo de Declarações IRPF                   │
+│ Contribuinte: JOAO DA SILVA                          │
+│ CPF: ***.***.***-72                                  │
+│ Período: 2024 → 2025                                 │
+╰──────────────────────────────────────────────────────╯
+
+💰 Comparativo de Rendimentos:
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Tipo                ┃           2024 ┃           2025 ┃         Variação ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ Tributáveis         │  R$ 150.000,00 │  R$ 180.000,00 │ +R$ 30.000 (+20%)│
+│ Isentos             │   R$ 10.000,00 │   R$ 15.000,00 │  +R$ 5.000 (+50%)│
+│ Exclusivos          │    R$ 5.000,00 │    R$ 8.000,00 │  +R$ 3.000 (+60%)│
+│                     │                │                │                  │
+│ Total Geral         │  R$ 165.000,00 │  R$ 203.000,00 │ +R$ 38.000 (+23%)│
+└─────────────────────┴────────────────┴────────────────┴──────────────────┘
+
+🏠 Evolução Patrimonial:
+╭─────────────────────────────────────────────────╮
+│ Patrimônio Líquido 2024: R$ 500.000,00          │
+│ Patrimônio Líquido 2025: R$ 750.000,00          │
+│ Variação: +R$ 250.000,00 (+50.0%)               │
+╰─────────────────────────────────────────────────╯
+
+Patrimônio por Categoria:
+┏━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Categoria               ┃           2024 ┃           2025 ┃         Variação ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ Imóveis                 │  R$ 350.000,00 │  R$ 350.000,00 │                - │
+│ Aplicações Financeiras  │  R$ 100.000,00 │  R$ 280.000,00 │+R$ 180.000(+180%)│
+│ Veículos                │   R$ 50.000,00 │  R$ 120.000,00 │ +R$ 70.000(+140%)│
+└─────────────────────────┴────────────────┴────────────────┴──────────────────┘
+
+🔍 Destaques de Ativos:
+
+Maiores Valorizações:
+  ▲ CDB BANCO XYZ 120% CDI: +R$ 50.000,00 (+25.0%)
+
+Novos Ativos:
+  + (Veículos) VW TAOS TSI 2024: R$ 214.000,00
+
+Ativos Resgatados/Liquidados:
+  ↩ (Aplicações Financeiras) CDB BANCO ABC: R$ 80.000,00
+
+✅ Comparação 2024 → 2025 concluída!
+```
+
+**Exportar como JSON:**
+
+```bash
+irpf-analyzer compare 2024.DEC 2025.DEC -o json
+```
+
 ### Informações do Arquivo
 
 ```bash
@@ -281,6 +356,18 @@ Se Variação Patrimonial <= Recursos Disponíveis × 1.5 → EXPLICADO ✅
 - 30% da renda para contribuintes com renda > R$ 200.000
 - 50% da renda para demais contribuintes
 
+### Constantes Fiscais de Referência (IRPF 2025)
+
+| Dedução | Limite | Observações |
+|---------|--------|-------------|
+| **Simplificada** | 20% até R$ 16.754,34 | Desconto automático, sem outras deduções |
+| **PGBL** | 12% da renda bruta | Só para declaração completa + contribuinte INSS |
+| **Educação** | R$ 3.561,50/pessoa/ano | Não inclui cursos livres, idiomas, material |
+| **Dependentes** | R$ 2.275,08/dependente | Dedução fixa por dependente |
+| **Despesas médicas** | Sem limite | Requer comprovação (NF, recibos) |
+| **Pensão alimentícia** | Sem limite | Apenas judicial/homologada |
+| **Doações incentivadas** | 6% do IR devido | Criança/Idoso, Cultura, Audiovisual |
+
 ### Verificações Realizadas
 
 1. **Patrimônio vs Renda**
@@ -296,6 +383,12 @@ Se Variação Patrimonial <= Recursos Disponíveis × 1.5 → EXPLICADO ✅
    - Bens que foram zerados sem venda declarada
    - Vendas declaradas na seção de alienações
    - Ações estrangeiras com lucro/prejuízo informado
+
+4. **Otimização Fiscal**
+   - Comparativo simplificada vs completa
+   - Oportunidade de contribuição PGBL
+   - Doações incentivadas disponíveis
+   - Livro-caixa para autônomos
 
 ### Tipos de Ativos Reconhecidos
 
@@ -322,13 +415,18 @@ irpf-analyzer/
 │   │   ├── analyzers/          # Analisadores de risco
 │   │   │   ├── consistency.py  # Verificações de consistência
 │   │   │   ├── deductions.py   # Verificações de deduções
+│   │   │   ├── optimization.py # Sugestões de otimização fiscal
+│   │   │   ├── comparison.py   # Comparativo ano-a-ano
 │   │   │   └── risk.py         # Cálculo de score
 │   │   ├── models/             # Modelos Pydantic
 │   │   │   ├── analysis.py     # RiskScore, Warning, Suggestion
+│   │   │   ├── comparison.py   # Modelos de comparação
 │   │   │   ├── declaration.py  # Declaration principal
 │   │   │   ├── patrimony.py    # BemDireito, Divida
 │   │   │   ├── alienation.py   # Alienações (vendas)
 │   │   │   └── checklist.py    # Checklist de documentos
+│   │   ├── rules/              # Regras de negócio
+│   │   │   └── tax_constants.py # Constantes fiscais (limites, alíquotas)
 │   │   └── services/           # Serviços de negócio
 │   │       └── checklist_generator.py
 │   ├── infrastructure/

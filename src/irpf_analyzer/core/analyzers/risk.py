@@ -4,13 +4,13 @@ from typing import Optional
 
 from irpf_analyzer.core.analyzers.consistency import ConsistencyAnalyzer
 from irpf_analyzer.core.analyzers.deductions import DeductionAnalyzer
+from irpf_analyzer.core.analyzers.optimization import OptimizationAnalyzer
 from irpf_analyzer.core.models.analysis import (
     AnalysisResult,
     Inconsistency,
     PatrimonyFlowAnalysis,
     RiskLevel,
     RiskScore,
-    Suggestion,
     Warning,
 )
 from irpf_analyzer.core.models.declaration import Declaration
@@ -41,7 +41,7 @@ class RiskAnalyzer:
         self._run_deduction_analysis()
 
         # Generate optimization suggestions
-        self._generate_suggestions()
+        self._run_optimization_analysis()
 
         # Calculate final risk score
         risk_score = self._calculate_score()
@@ -70,78 +70,11 @@ class RiskAnalyzer:
         self.inconsistencies.extend(inconsistencies)
         self.warnings.extend(warnings)
 
-    def _generate_suggestions(self) -> None:
-        """Generate optimization suggestions based on declaration data."""
-        from decimal import Decimal
-        from irpf_analyzer.core.models.enums import TipoDeclaracao
-
-        renda_tributavel = self.declaration.total_rendimentos_tributaveis
-
-        # Calculate actual deductions from itemized list (more reliable than total_deducoes)
-        total_deducoes_real = sum(d.valor for d in self.declaration.deducoes)
-
-        # Sanity check: skip suggestions if income data looks unreliable
-        # (very high values indicate parsing issues)
-        income_looks_valid = Decimal("0") < renda_tributavel < Decimal("10000000")
-
-        # Suggestion: Compare simplified vs complete declaration
-        if self.declaration.tipo_declaracao == TipoDeclaracao.COMPLETA:
-            if income_looks_valid:
-                # Simplified uses 20% discount, capped at ~16,754.34 (2024)
-                desconto_simplificado = min(
-                    renda_tributavel * Decimal("0.20"),
-                    Decimal("16754.34")
-                )
-
-                if desconto_simplificado > total_deducoes_real:
-                    economia = desconto_simplificado - total_deducoes_real
-                    self.suggestions.append(
-                        Suggestion(
-                            titulo="Considere declaração simplificada",
-                            descricao=(
-                                f"Desconto simplificado (R$ {desconto_simplificado:,.2f}) "
-                                f"é maior que suas deduções (R$ {total_deducoes_real:,.2f})"
-                            ),
-                            economia_potencial=economia,
-                            prioridade=1,
-                        )
-                    )
-            else:
-                # Income not parsed - suggest based on deductions alone
-                if total_deducoes_real < Decimal("16754.34"):
-                    self.suggestions.append(
-                        Suggestion(
-                            titulo="Considere declaração simplificada",
-                            descricao=(
-                                f"Suas deduções (R$ {total_deducoes_real:,.2f}) são menores que "
-                                f"o desconto máximo simplificado (R$ 16.754,34)"
-                            ),
-                            economia_potencial=None,
-                            prioridade=1,
-                        )
-                    )
-
-        # Suggestion: PGBL contribution (only if income looks valid)
-        if income_looks_valid and renda_tributavel > Decimal("50000"):
-            limite_pgbl = renda_tributavel * Decimal("0.12")
-            resumo = self.declaration.resumo_deducoes
-            pgbl_usado = resumo.previdencia_privada
-
-            if pgbl_usado < limite_pgbl:
-                disponivel = limite_pgbl - pgbl_usado
-                economia_estimada = disponivel * Decimal("0.275")  # Max bracket
-
-                self.suggestions.append(
-                    Suggestion(
-                        titulo="Oportunidade: PGBL",
-                        descricao=(
-                            f"Você pode deduzir até R$ {limite_pgbl:,.2f} em PGBL "
-                            f"(12% da renda bruta). Espaço disponível: R$ {disponivel:,.2f}"
-                        ),
-                        economia_potencial=economia_estimada,
-                        prioridade=2,
-                    )
-                )
+    def _run_optimization_analysis(self) -> None:
+        """Run optimization analysis and collect suggestions."""
+        analyzer = OptimizationAnalyzer(self.declaration)
+        suggestions = analyzer.analyze()
+        self.suggestions.extend(suggestions)
 
     def _calculate_score(self) -> RiskScore:
         """Calculate compliance score from 100 (safe) to 0 (high risk).
