@@ -371,26 +371,34 @@ class DECParser:
 
         return deducoes
 
-    def _parse_bens_direitos(self) -> list[BemDireito]:
+    def _parse_bens_direitos(self, debug: bool = False) -> list[BemDireito]:
         """Parse assets from lines type 27."""
         bens = []
 
         for line in self.lines:
             if line.startswith("27"):
                 # Line 27 structure (assets) - observed from real file:
-                # 27 + CPF_TITULAR(11) + GRUPO(2) + COD(2) + TIPO_SIT(2) +
-                # DISCRIMINACAO(~512 chars padded) + VALOR_ANTERIOR(13) + VALOR_ATUAL(13) + rest...
-                #
-                # Fixed positions discovered:
-                # - Position 19-530: Discriminação (padded with spaces)
-                # - Position 531-544: Valor em 31/12 do ano anterior (13 dígitos)
-                # - Position 544-557: Valor em 31/12 do ano atual (13 dígitos)
-                # - Position 1188-1201: Lucro/Prejuízo aplicação financeira (13 dígitos)
-                #   Used for foreign stocks where profit/loss is declared within the asset
+                # Position 0-1: Line type "27"
+                # Position 2-12: CPF titular (11 chars)
+                # Position 13-14: GRUPO (2 chars) - asset group code
+                # Position 15-16: COD (2 chars) - sub-code within group
+                # Position 17-18: TIPO_SIT (2 chars)
+                # Position 19-530: Discriminação (padded with spaces)
+                # Position 531-544: Valor em 31/12 do ano anterior (13 dígitos)
+                # Position 544-557: Valor em 31/12 do ano atual (13 dígitos)
+                # Position 1185-1199: Lucro/Prejuízo (14 chars, 3 decimals)
 
                 try:
-                    grupo_cod = line[13:15]
-                    codigo = line[15:17]
+                    # IMPORTANT: Positions discovered from real file analysis
+                    # The GRUPO and CODIGO fields are at positions 15-16 and 13-14 respectively
+                    # (opposite of what was initially assumed)
+                    codigo = line[13:15]  # Sub-code within group (e.g., 11=apartamento, 12=casa)
+                    grupo_cod = line[15:17]  # Main group code (e.g., 01=imóveis, 02=veículos)
+
+                    if debug:
+                        # Debug output to verify field extraction
+                        discriminacao_preview = line[19:80].strip()
+                        print(f"DEBUG BEM: grupo={grupo_cod}, cod={codigo}, desc={discriminacao_preview[:40]}...")
 
                     # Discriminação: position 19 to ~530 (padded)
                     discriminacao = line[19:531].strip()
@@ -431,7 +439,19 @@ class DECParser:
         return bens
 
     def _map_grupo_bem(self, codigo: str) -> GrupoBem:
-        """Map asset group code to enum."""
+        """Map asset group code to enum.
+
+        IRPF official group codes (Grupos de Bens e Direitos):
+        - 01: Imóveis (Real Estate)
+        - 02: Veículos automotores (Vehicles)
+        - 03: Participações societárias (Corporate Participations)
+        - 04: Aplicações e Investimentos (Investments)
+        - 05: Poupança (Savings)
+        - 06: Depósitos à vista (Checking accounts)
+        - 07: Fundos (Funds)
+        - 08: Criptoativos (Crypto assets)
+        - 99: Outros bens e direitos (Other assets)
+        """
         mapping = {
             "01": GrupoBem.IMOVEIS,
             "02": GrupoBem.VEICULOS,
@@ -442,9 +462,6 @@ class DECParser:
             "07": GrupoBem.FUNDOS,
             "08": GrupoBem.CRIPTOATIVOS,
             "99": GrupoBem.OUTROS_BENS,
-            "11": GrupoBem.IMOVEIS,  # Alternative code for real estate
-            "12": GrupoBem.IMOVEIS,
-            "13": GrupoBem.IMOVEIS,
         }
         return mapping.get(codigo, GrupoBem.OUTROS_BENS)
 

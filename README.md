@@ -45,6 +45,15 @@ Uma ferramenta CLI em Python para analisar arquivos `.DEC` e `.DBK` (declaraçõ
   - Impacto tributário comparado
   - Destaques de ativos (valorizações, vendas, novos)
 
+- **Detecção de Padrões Suspeitos** 🆕
+  - Validação de CPF/CNPJ via cálculo de dígitos verificadores (100% local)
+  - Análise estatística com Lei de Benford para detectar valores fabricados
+  - Detecção de outliers usando método IQR (Interquartile Range)
+  - Identificação de valores redondos suspeitos em deduções
+  - Verificação de depreciação irregular de veículos
+  - Detecção de despesas médicas concentradas em poucos prestadores
+  - Análise temporal multi-ano (renda estagnada vs patrimônio crescente)
+
 - **Relatórios PDF Completos**
   - Exportação para PDF com todas as informações
   - Resumo financeiro e patrimonial
@@ -312,6 +321,62 @@ Ativos Resgatados/Liquidados:
 irpf-analyzer compare 2024.DEC 2025.DEC -o json
 ```
 
+### Análise Temporal Multi-Ano
+
+```bash
+irpf-analyzer analyze-multi 2023.DEC 2024.DEC 2025.DEC
+```
+
+Detecta padrões suspeitos que só aparecem ao comparar declarações de diferentes anos:
+
+**Exemplo de saída:**
+
+```
+╭──────────────────────────────────────────────────────╮
+│ 📊 Análise Temporal Multi-Ano                        │
+│ Contribuinte: JOAO DA SILVA                          │
+│ Período: 2023-2025                                   │
+│ Declarações analisadas: 3                            │
+╰──────────────────────────────────────────────────────╯
+
+Evolução Anual:
+┏━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+┃ Ano    ┃    Renda Total ┃     Patrimônio ┃  Desp. Médicas ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+│ 2023   │  R$ 150.000,00 │  R$ 500.000,00 │   R$ 12.000,00 │
+│ 2024   │  R$ 155.000,00 │  R$ 750.000,00 │   R$ 12.500,00 │
+│ 2025   │  R$ 160.000,00 │ R$ 1.000.000,00│   R$ 12.300,00 │
+└────────┴────────────────┴────────────────┴────────────────┘
+
+⚠️  Padrões Temporais Detectados:
+
+╭──────────────────────────────────────────────────────╮
+│ Tipo: renda_estagnada_patrimonio_crescente           │
+│                                                      │
+│ Renda estagnada (var. média 3.3%/ano) enquanto       │
+│ patrimônio cresceu significativamente                │
+│ (R$ 500.000 → R$ 1.000.000)                          │
+│                                                      │
+│ Anos afetados: 2023, 2024, 2025                      │
+│ Risco: ALTO                                          │
+│ Valor impacto: R$ 500.000,00                         │
+│                                                      │
+│ 💡 Verificar se há rendimentos não declarados,       │
+│    heranças, doações ou ganhos de capital omitidos   │
+╰──────────────────────────────────────────────────────╯
+
+⚠️  2 padrão(ões) temporal(is) detectado(s)
+```
+
+**Padrões Temporais Detectados:**
+
+| Padrão | Descrição |
+|--------|-----------|
+| Renda Estagnada + Patrimônio Crescente | Renda não cresce mas patrimônio aumenta significativamente |
+| Queda Súbita de Renda | Renda cai > 30% mas patrimônio se mantém |
+| Despesas Médicas Constantes | Valores praticamente iguais por 3+ anos (estatisticamente improvável) |
+| Padrão de Liquidação | Liquidação sistemática de ativos sem ganho de capital declarado |
+
 ### Informações do Arquivo
 
 ```bash
@@ -400,6 +465,15 @@ Se você tinha um CDB de R$ 100.000 que venceu e virou R$ 110.000 na conta:
    - Oportunidade de contribuição PGBL
    - Doações incentivadas disponíveis
    - Livro-caixa para autônomos
+
+5. **Detecção de Padrões** 🆕
+   - **Validação CPF/CNPJ**: Cálculo local de dígitos verificadores (módulo 11)
+   - **Lei de Benford**: Análise estatística dos primeiros dígitos (χ² > 15.51 = anomalia)
+   - **Outliers (IQR)**: Valores fora do intervalo Q1-1.5×IQR a Q3+1.5×IQR
+   - **Valores Redondos**: Deduções com mais de 50% de valores "certinhos" (R$ 1.000, R$ 5.000)
+   - **Depreciação de Veículos**: Variação fora de 5-15% ao ano
+   - **Despesas Concentradas**: Mais de 70% das despesas médicas em um único prestador
+   - **Imóveis sem Aluguel**: Múltiplos imóveis sem renda de locação declarada
 
 ### Tipos de Ativos Reconhecidos
 

@@ -12,6 +12,7 @@ from irpf_analyzer.core.models.analysis import (
     RiskLevel,
     Inconsistency,
     Warning,
+    WarningCategory,
     Suggestion,
 )
 from irpf_analyzer.core.models.checklist import (
@@ -37,6 +38,7 @@ __all__ = [
     "RiskLevel",
     "Inconsistency",
     "Warning",
+    "WarningCategory",
     "Suggestion",
     "Document",
     "DocumentCategory",

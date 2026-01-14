@@ -10,7 +10,7 @@ from rich.table import Table
 from irpf_analyzer import __version__
 from irpf_analyzer.cli.console import console, print_error, print_success
 from irpf_analyzer.core.analyzers import analyze_declaration
-from irpf_analyzer.core.models import RiskLevel
+from irpf_analyzer.core.models import RiskLevel, WarningCategory
 from irpf_analyzer.infrastructure.parsers import parse_file, detect_file_type, FileType
 from irpf_analyzer.shared.exceptions import ParseError
 from irpf_analyzer.shared.formatters import format_currency
@@ -104,6 +104,136 @@ def info(
         raise typer.Exit(1)
     except Exception as e:
         print_error(f"Erro inesperado: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def debug_assets(
+    arquivo: Annotated[
+        Path,
+        typer.Argument(
+            help="Caminho para arquivo .DEC ou .DBK",
+            exists=True,
+        ),
+    ],
+    raw: Annotated[
+        bool,
+        typer.Option("--raw", "-r", help="Mostra bytes brutos das posições para debug"),
+    ] = False,
+) -> None:
+    """Debug: mostra como os bens estão sendo parseados do arquivo.
+
+    Útil para verificar se o grupo de cada bem está sendo extraído corretamente.
+    Use --raw para ver os bytes nas diferentes posições.
+    """
+    from irpf_analyzer.core.models.enums import GrupoBem
+
+    try:
+        # Read raw lines
+        with open(arquivo, "r", encoding="latin-1") as f:
+            lines = f.readlines()
+
+        console.print(Panel.fit(
+            f"[header]Arquivo:[/header] {arquivo.name}\n"
+            f"[header]Linhas tipo 27 (Bens):[/header] {sum(1 for l in lines if l.startswith('27'))}",
+            title="Debug de Bens e Direitos",
+            border_style="blue",
+        ))
+
+        if raw:
+            # Show raw bytes at different positions
+            console.print("\n[bold]Bytes brutos (posições 2-20):[/bold]")
+            table = Table(show_header=True, header_style="bold")
+            table.add_column("#", width=3)
+            table.add_column("2-13 (CPF?)", width=12)
+            table.add_column("13-15", width=5)
+            table.add_column("15-17", width=5)
+            table.add_column("17-19", width=5)
+            table.add_column("Discriminação (20+)", overflow="fold")
+
+            for i, line in enumerate(lines):
+                if line.startswith("27") and i < 30:
+                    table.add_row(
+                        str(i+1),
+                        line[2:13],
+                        f"[yellow]{line[13:15]}[/yellow]",
+                        f"[cyan]{line[15:17]}[/cyan]",
+                        line[17:19],
+                        line[19:70].strip(),
+                    )
+            console.print(table)
+            console.print("\n[dim]Legenda: [yellow]13-15[/yellow]=pos atual grupo, [cyan]15-17[/cyan]=pos atual código[/dim]")
+            return
+
+        # Grupo mapping
+        grupo_mapping = {
+            "01": GrupoBem.IMOVEIS,
+            "02": GrupoBem.VEICULOS,
+            "03": GrupoBem.PARTICIPACOES_SOCIETARIAS,
+            "04": GrupoBem.APLICACOES_FINANCEIRAS,
+            "05": GrupoBem.POUPANCA,
+            "06": GrupoBem.DEPOSITOS_VISTA,
+            "07": GrupoBem.FUNDOS,
+            "08": GrupoBem.CRIPTOATIVOS,
+            "99": GrupoBem.OUTROS_BENS,
+        }
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Grupo", width=6)
+        table.add_column("Cód", width=5)
+        table.add_column("Grupo Mapeado", width=25)
+        table.add_column("Discriminação", overflow="fold")
+        table.add_column("Valor Atual", justify="right")
+
+        count = 0
+        imoveis_count = 0
+        for line in lines:
+            if line.startswith("27"):
+                count += 1
+                # Extract fields - CODIGO at 13-14, GRUPO at 15-16 (confirmed from real file)
+                codigo = line[13:15]  # Sub-code (e.g., 11=apartamento)
+                grupo_cod = line[15:17]  # Main group (e.g., 01=imóveis)
+                discriminacao = line[19:531].strip()[:60]
+
+                # Parse value
+                valor_atual = "0"
+                if len(line) >= 557:
+                    try:
+                        raw_val = line[544:557].strip()
+                        if raw_val and raw_val != "0" * len(raw_val):
+                            # Convert to decimal (2 decimal places)
+                            val = int(raw_val.lstrip("0") or "0") / 100
+                            valor_atual = f"R$ {val:,.2f}"
+                    except ValueError:
+                        pass
+
+                grupo_enum = grupo_mapping.get(grupo_cod, GrupoBem.OUTROS_BENS)
+                grupo_display = f"[green]{grupo_enum.value}[/green]" if grupo_cod == "01" else grupo_enum.value
+
+                if grupo_cod == "01":
+                    imoveis_count += 1
+
+                # Highlight IMOVEIS in green
+                grupo_style = "[green]" if grupo_cod == "01" else ""
+                grupo_end = "[/green]" if grupo_cod == "01" else ""
+
+                table.add_row(
+                    str(count),
+                    f"{grupo_style}{grupo_cod}{grupo_end}",
+                    codigo,
+                    grupo_display,
+                    discriminacao,
+                    valor_atual,
+                )
+
+        console.print(table)
+        console.print()
+        console.print(f"[bold]Total de bens:[/bold] {count}")
+        console.print(f"[bold]Total classificados como IMÓVEIS (grupo 01):[/bold] [green]{imoveis_count}[/green]")
+
+    except Exception as e:
+        print_error(f"Erro: {e}")
         raise typer.Exit(1)
 
 
@@ -343,13 +473,26 @@ def analyze(
 
             console.print(inc_table)
 
-        # Warnings
-        if result.warnings:
+        # Separate pattern warnings from regular warnings
+        pattern_warnings = [w for w in result.warnings if w.categoria == WarningCategory.PADRAO]
+        regular_warnings = [w for w in result.warnings if w.categoria != WarningCategory.PADRAO]
+
+        # Regular Warnings
+        if regular_warnings:
             console.print()
             console.print("[header]📋 Avisos:[/header]")
-            for warning in result.warnings:
+            for warning in regular_warnings:
                 style = "yellow" if warning.risco == RiskLevel.LOW else "red"
                 console.print(f"  [{style}]•[/{style}] {warning.mensagem}")
+
+        # Pattern Detection Warnings (separate section)
+        if pattern_warnings:
+            console.print()
+            console.print("[header]🔍 Padrões Detectados:[/header]")
+            for warning in pattern_warnings:
+                style = "yellow" if warning.risco == RiskLevel.LOW else "red"
+                info_tag = " [dim](informativo)[/dim]" if warning.informativo else ""
+                console.print(f"  [{style}]•[/{style}] {warning.mensagem}{info_tag}")
 
         # Suggestions
         if result.suggestions:
@@ -641,6 +784,177 @@ def compare(
     except Exception as e:
         print_error(f"Erro inesperado: {e}")
         raise typer.Exit(1)
+
+
+@app.command(name="analyze-multi")
+def analyze_multi(
+    arquivos: Annotated[
+        list[Path],
+        typer.Argument(
+            help="Arquivos .DEC/.DBK de diferentes anos (mínimo 2)",
+        ),
+    ],
+    output: Annotated[
+        str,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Formato de saída: table, json",
+        ),
+    ] = "table",
+) -> None:
+    """Análise de padrões temporais comparando múltiplos anos.
+
+    Detecta padrões suspeitos que só aparecem ao comparar declarações
+    de diferentes anos, como:
+
+    - Renda estagnada com patrimônio crescente
+    - Quedas súbitas de renda
+    - Despesas médicas constantes
+    - Padrões de liquidação de ativos
+    """
+    try:
+        from irpf_analyzer.core.analyzers.temporal import (
+            TemporalPatternAnalyzer,
+            TemporalPattern,
+        )
+
+        # Validate minimum files
+        if len(arquivos) < 2:
+            print_error("Forneça pelo menos 2 arquivos de anos diferentes")
+            raise typer.Exit(1)
+
+        # Check all files exist
+        for arq in arquivos:
+            if not arq.exists():
+                print_error(f"Arquivo não encontrado: {arq}")
+                raise typer.Exit(1)
+
+        # Parse all declarations
+        console.print()
+        declarations = []
+        for arq in arquivos:
+            console.print(f"[muted]Parseando {arq.name}...[/muted]")
+            decl = parse_file(arq)
+            declarations.append(decl)
+
+        # Run temporal analysis
+        console.print("[muted]Analisando padrões temporais...[/muted]")
+        try:
+            analyzer = TemporalPatternAnalyzer(declarations)
+            patterns = analyzer.analyze()
+        except ValueError as e:
+            print_error(str(e))
+            raise typer.Exit(1)
+
+        # JSON output
+        if output == "json":
+            import json
+            output_data = {
+                "contribuinte": analyzer.contribuinte_nome,
+                "periodo": analyzer.periodo,
+                "patterns": [p.model_dump() for p in patterns],
+            }
+            print(json.dumps(output_data, indent=2, default=str))
+            return
+
+        # Display results
+        _display_temporal_patterns(analyzer, patterns)
+
+        if patterns:
+            console.print()
+            console.print(
+                f"[yellow]⚠️  {len(patterns)} padrão(ões) temporal(is) detectado(s)[/yellow]"
+            )
+        else:
+            print_success("Nenhum padrão temporal suspeito detectado!")
+
+    except ParseError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        print_error(f"Erro inesperado: {e}")
+        raise typer.Exit(1)
+
+
+def _display_temporal_patterns(analyzer, patterns: list) -> None:
+    """Display temporal pattern analysis results."""
+    from irpf_analyzer.core.models import RiskLevel
+
+    # Header
+    console.print()
+    console.print(
+        Panel.fit(
+            f"[header]Contribuinte:[/header] {analyzer.contribuinte_nome}\n"
+            f"[header]Período:[/header] {analyzer.periodo}\n"
+            f"[header]Declarações analisadas:[/header] {len(analyzer.declarations)}",
+            title="📊 Análise Temporal Multi-Ano",
+            border_style="blue",
+        )
+    )
+
+    # Show year-over-year summary
+    console.print()
+    console.print("[header]Evolução Anual:[/header]")
+    summary_table = Table(show_header=True, header_style="bold")
+    summary_table.add_column("Ano", style="cyan")
+    summary_table.add_column("Renda Total", justify="right")
+    summary_table.add_column("Patrimônio", justify="right")
+    summary_table.add_column("Desp. Médicas", justify="right")
+
+    for decl in analyzer.declarations:
+        renda = decl.total_rendimentos_tributaveis + decl.total_rendimentos_isentos
+        patrimonio = decl.resumo_patrimonio.total_bens_atual
+        desp_medicas = decl.resumo_deducoes.despesas_medicas
+
+        summary_table.add_row(
+            str(decl.ano_exercicio),
+            format_currency(renda),
+            format_currency(patrimonio),
+            format_currency(desp_medicas),
+        )
+
+    console.print(summary_table)
+
+    # Show detected patterns
+    if patterns:
+        console.print()
+        console.print("[header]⚠️  Padrões Temporais Detectados:[/header]")
+
+        risk_styles = {
+            RiskLevel.LOW: "green",
+            RiskLevel.MEDIUM: "yellow",
+            RiskLevel.HIGH: "red",
+            RiskLevel.CRITICAL: "bold red",
+        }
+
+        for pattern in patterns:
+            color = risk_styles.get(pattern.risco, "white")
+            anos_str = ", ".join(str(a) for a in pattern.anos_afetados)
+
+            console.print()
+            console.print(
+                Panel(
+                    f"[header]Tipo:[/header] {pattern.tipo.value}\n\n"
+                    f"{pattern.descricao}\n\n"
+                    f"[header]Anos afetados:[/header] {anos_str}\n"
+                    f"[header]Risco:[/header] [{color}]{pattern.risco.value}[/{color}]\n"
+                    + (f"[header]Valor impacto:[/header] {format_currency(pattern.valor_impacto)}\n"
+                       if pattern.valor_impacto else "")
+                    + (f"\n[dim]💡 {pattern.recomendacao}[/dim]"
+                       if pattern.recomendacao else ""),
+                    border_style=color.replace("bold ", ""),
+                )
+            )
+    else:
+        console.print()
+        console.print(
+            Panel.fit(
+                "[green]✅ Nenhum padrão temporal suspeito detectado[/green]\n\n"
+                "A evolução da declaração ao longo dos anos está consistente.",
+                border_style="green",
+            )
+        )
 
 
 def _display_comparison(result) -> None:

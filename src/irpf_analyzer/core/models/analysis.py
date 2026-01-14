@@ -19,6 +19,7 @@ class RiskLevel(str, Enum):
 class InconsistencyType(str, Enum):
     """Types of inconsistencies detected."""
 
+    # Core consistency checks
     PATRIMONIO_VS_RENDA = "patrimonio_vs_renda"
     DESPESAS_MEDICAS_ALTAS = "despesas_medicas_altas"
     DESPESAS_EDUCACAO_LIMITE = "despesas_educacao_limite"
@@ -26,6 +27,33 @@ class InconsistencyType(str, Enum):
     DEDUCAO_SEM_COMPROVANTE = "deducao_sem_comprovante"
     DEPENDENTE_DUPLICADO = "dependente_duplicado"
     VALOR_ZERADO_SUSPEITO = "valor_zerado_suspeito"
+
+    # Structural patterns (single declaration)
+    VALORES_REDONDOS_DEDUCOES = "valores_redondos_deducoes"
+    DEPRECIACAO_VEICULO_IRREGULAR = "depreciacao_veiculo_irregular"
+    DESPESAS_MEDICAS_CONCENTRADAS = "despesas_medicas_concentradas"
+    IMOVEL_SEM_RENDA_ALUGUEL = "imovel_sem_renda_aluguel"
+
+    # Fraud patterns
+    CPF_INVALIDO = "cpf_invalido"
+    CNPJ_INVALIDO = "cnpj_invalido"
+    DESPESA_MEDICA_FICTICIA = "despesa_medica_ficticia"
+    ALUGUEL_NAO_DECLARADO = "aluguel_nao_declarado"
+
+    # Financial inconsistency patterns
+    SALDO_BANCARIO_INCOMPATIVEL = "saldo_bancario_incompativel"
+    COMPRA_SEM_LASTRO = "compra_sem_lastro"
+    DIVIDENDOS_VS_PARTICIPACAO = "dividendos_vs_participacao"
+
+    # Statistical patterns
+    VALOR_OUTLIER = "valor_outlier"
+    DISTRIBUICAO_BENFORD_ANOMALA = "distribuicao_benford_anomala"
+
+    # Temporal patterns (multi-year)
+    RENDA_ESTAGNADA_PATRIMONIO_CRESCENTE = "renda_estagnada_patrimonio_crescente"
+    QUEDA_SUBITA_RENDA = "queda_subita_renda"
+    DESPESAS_MEDICAS_CONSTANTES = "despesas_medicas_constantes"
+    PADRAO_LIQUIDACAO_SUSPEITO = "padrao_liquidacao_suspeito"
 
 
 class Inconsistency(BaseModel):
@@ -43,12 +71,25 @@ class Inconsistency(BaseModel):
     )
 
 
+class WarningCategory(str, Enum):
+    """Category of warning for grouping in output."""
+
+    PADRAO = "padrao"  # Pattern detection (statistical, structural, fraud)
+    CONSISTENCIA = "consistencia"  # Consistency checks
+    DEDUCAO = "deducao"  # Deduction-related
+    GERAL = "geral"  # General warnings
+
+
 class Warning(BaseModel):
     """A warning about potential issues."""
 
     mensagem: str = Field(..., description="Warning message")
     risco: RiskLevel = Field(default=RiskLevel.LOW)
     campo: Optional[str] = Field(default=None, description="Related field")
+    categoria: WarningCategory = Field(
+        default=WarningCategory.GERAL,
+        description="Category for grouping (padrao, consistencia, etc.)",
+    )
     informativo: bool = Field(
         default=False,
         description="If True, shows in output but doesn't count towards risk score",
