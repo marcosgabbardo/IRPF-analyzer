@@ -94,3 +94,7 @@ tests/fixtures/*.dbk
 **/secrets/
 *.pem
 *.key
+
+# PDF reports (may contain personal data)
+*.pdf
+*.PDF
