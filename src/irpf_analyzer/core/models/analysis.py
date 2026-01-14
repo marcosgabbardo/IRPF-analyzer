@@ -37,6 +37,10 @@ class Inconsistency(BaseModel):
     valor_esperado: Optional[Decimal] = Field(default=None)
     risco: RiskLevel = Field(default=RiskLevel.MEDIUM)
     recomendacao: Optional[str] = Field(default=None)
+    valor_impacto: Optional[Decimal] = Field(
+        default=None,
+        description="Value at stake for weighted score calculation",
+    )
 
 
 class Warning(BaseModel):
@@ -48,6 +52,10 @@ class Warning(BaseModel):
     informativo: bool = Field(
         default=False,
         description="If True, shows in output but doesn't count towards risk score",
+    )
+    valor_impacto: Optional[Decimal] = Field(
+        default=None,
+        description="Value at stake for weighted score calculation",
     )
 
 

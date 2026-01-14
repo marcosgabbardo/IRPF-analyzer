@@ -64,6 +64,8 @@ class DeductionAnalyzer:
             else:
                 risco = RiskLevel.LOW
 
+            # Impact is the amount above threshold that could be questioned
+            valor_acima_esperado = despesas_medicas - (renda_total * self.MEDICAL_EXPENSE_THRESHOLD)
             self.inconsistencies.append(
                 Inconsistency(
                     tipo=InconsistencyType.DESPESAS_MEDICAS_ALTAS,
@@ -78,6 +80,7 @@ class DeductionAnalyzer:
                         "Proporção alta de despesas médicas requer "
                         "documentação completa (notas fiscais, recibos)"
                     ),
+                    valor_impacto=valor_acima_esperado,
                 )
             )
 
@@ -94,6 +97,7 @@ class DeductionAnalyzer:
         limite_maximo = self.EDUCATION_LIMIT_2024 * num_pessoas
 
         if despesas_educacao > limite_maximo:
+            excesso = despesas_educacao - limite_maximo
             self.inconsistencies.append(
                 Inconsistency(
                     tipo=InconsistencyType.DESPESAS_EDUCACAO_LIMITE,
@@ -109,6 +113,7 @@ class DeductionAnalyzer:
                         "Limite de dedução com educação é "
                         f"R$ {self.EDUCATION_LIMIT_2024:,.2f} por pessoa/ano"
                     ),
+                    valor_impacto=excesso,  # Amount over limit
                 )
             )
 
@@ -130,6 +135,8 @@ class DeductionAnalyzer:
             seen.add(cpf)
 
         if duplicates:
+            # Impact = deduction value per duplicate dependent
+            impacto = self.DEPENDENT_DEDUCTION_2024 * len(duplicates)
             self.inconsistencies.append(
                 Inconsistency(
                     tipo=InconsistencyType.DEPENDENTE_DUPLICADO,
@@ -139,6 +146,7 @@ class DeductionAnalyzer:
                     ),
                     risco=RiskLevel.CRITICAL,
                     recomendacao="Cada dependente deve aparecer apenas uma vez",
+                    valor_impacto=impacto,
                 )
             )
 
@@ -159,5 +167,6 @@ class DeductionAnalyzer:
                             ),
                             risco=RiskLevel.MEDIUM,
                             campo="deducoes",
+                            valor_impacto=deducao.valor,
                         )
                     )

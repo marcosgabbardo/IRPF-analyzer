@@ -173,6 +173,7 @@ class ConsistencyAnalyzer:
                             "Verifique se há rendimentos não declarados ou "
                             "se valores de bens estão corretos"
                         ),
+                        valor_impacto=diferenca,  # Unexplained amount
                     )
                 )
 
@@ -254,6 +255,7 @@ class ConsistencyAnalyzer:
                             ),
                             risco=RiskLevel.LOW,
                             campo="bens_direitos",
+                            valor_impacto=abs(variacao),
                         )
                     )
                 # Check if there's a corresponding alienação (sale) declared
@@ -267,6 +269,7 @@ class ConsistencyAnalyzer:
                             ),
                             risco=RiskLevel.LOW,
                             campo="bens_direitos",
+                            valor_impacto=abs(variacao),
                         )
                     )
                 # For foreign stocks (codigo 12), lucro=0 could mean break-even sale
@@ -281,6 +284,7 @@ class ConsistencyAnalyzer:
                             risco=RiskLevel.MEDIUM,
                             campo="bens_direitos",
                             informativo=True,  # Shows in output but doesn't count in score
+                            valor_impacto=abs(variacao),
                         )
                     )
                 else:
@@ -292,6 +296,7 @@ class ConsistencyAnalyzer:
                             ),
                             risco=RiskLevel.MEDIUM,
                             campo="bens_direitos",
+                            valor_impacto=abs(variacao),
                         )
                     )
 
@@ -305,6 +310,7 @@ class ConsistencyAnalyzer:
                         ),
                         risco=RiskLevel.LOW,
                         campo="bens_direitos",
+                        valor_impacto=variacao,
                     )
                 )
 
@@ -412,5 +418,6 @@ class ConsistencyAnalyzer:
                     valor_esperado=None,
                     risco=RiskLevel.HIGH,
                     recomendacao="Verifique se todos os rendimentos foram declarados",
+                    valor_impacto=total_patrimonio,  # Full patrimony at stake
                 )
             )

@@ -1,5 +1,6 @@
 """Risk analyzer and score calculator for IRPF declarations."""
 
+from decimal import Decimal
 from typing import Optional
 
 from irpf_analyzer.core.analyzers.consistency import ConsistencyAnalyzer
@@ -11,21 +12,37 @@ from irpf_analyzer.core.models.analysis import (
     PatrimonyFlowAnalysis,
     RiskLevel,
     RiskScore,
+    Suggestion,
     Warning,
 )
 from irpf_analyzer.core.models.declaration import Declaration
 
 
 class RiskAnalyzer:
-    """Main analyzer that aggregates all checks and calculates risk score."""
+    """Main analyzer that aggregates all checks and calculates risk score.
 
-    # Points added to score per risk level
+    Score weighting: Issues are weighted by their financial impact relative
+    to total patrimony. A R$ 100 error has less impact than a R$ 1,000,000 error.
+    """
+
+    # Base points per risk level (before weighting)
     RISK_POINTS = {
         RiskLevel.LOW: 5,
         RiskLevel.MEDIUM: 15,
         RiskLevel.HIGH: 30,
         RiskLevel.CRITICAL: 50,
     }
+
+    # Weight factors based on percentage of patrimony affected
+    # percentual = valor_impacto / patrimonio_total
+    WEIGHT_THRESHOLDS = [
+        (Decimal("0.01"), Decimal("0.2")),   # <= 1%: minimal weight (0.2x)
+        (Decimal("0.05"), Decimal("0.5")),   # <= 5%: low weight (0.5x)
+        (Decimal("0.10"), Decimal("0.8")),   # <= 10%: medium-low weight (0.8x)
+        (Decimal("0.25"), Decimal("1.0")),   # <= 25%: baseline weight (1.0x)
+        (Decimal("0.50"), Decimal("1.5")),   # <= 50%: high weight (1.5x)
+        (Decimal("1.00"), Decimal("2.0")),   # > 50%: maximum weight (2.0x)
+    ]
 
     def __init__(self, declaration: Declaration):
         self.declaration = declaration
@@ -76,28 +93,69 @@ class RiskAnalyzer:
         suggestions = analyzer.analyze()
         self.suggestions.extend(suggestions)
 
+    def _get_weight_factor(self, valor_impacto: Optional[Decimal]) -> Decimal:
+        """Calculate weight factor based on valor_impacto / patrimonio.
+
+        Higher impact relative to patrimony = higher weight factor.
+        Returns 1.0 (baseline) if valor_impacto is not set.
+        """
+        if not valor_impacto or valor_impacto <= 0:
+            return Decimal("1.0")  # Baseline weight if no value specified
+
+        patrimonio = self.declaration.resumo_patrimonio.total_bens_atual
+        if patrimonio <= 0:
+            return Decimal("1.0")  # Baseline if no patrimony
+
+        percentual = abs(valor_impacto) / patrimonio
+
+        # Find the appropriate weight factor
+        for threshold, weight in self.WEIGHT_THRESHOLDS:
+            if percentual <= threshold:
+                return weight
+
+        return Decimal("2.0")  # Maximum weight for > 100%
+
     def _calculate_score(self) -> RiskScore:
         """Calculate compliance score from 100 (safe) to 0 (high risk).
 
         Higher score = lower risk of being flagged for audit.
+        Points are weighted by financial impact relative to total patrimony.
         """
-        score = 100  # Start at maximum (fully compliant)
+        score = Decimal("100")  # Start at maximum (fully compliant)
         fatores: list[str] = []
 
-        # Subtract points for inconsistencies
+        # Subtract points for inconsistencies (weighted by impact)
         for inconsistency in self.inconsistencies:
-            points = self.RISK_POINTS.get(inconsistency.risco, 10)
-            score -= points
-            fatores.append(f"{inconsistency.tipo.value}: -{points} pts")
+            base_points = self.RISK_POINTS.get(inconsistency.risco, 10)
+            weight = self._get_weight_factor(inconsistency.valor_impacto)
+            weighted_points = Decimal(str(base_points)) * weight
+            score -= weighted_points
 
-        # Subtract points for warnings (half weight), skip informative ones
+            # Format factor description
+            if inconsistency.valor_impacto:
+                pct = (inconsistency.valor_impacto / self.declaration.resumo_patrimonio.total_bens_atual * 100
+                       if self.declaration.resumo_patrimonio.total_bens_atual > 0 else Decimal("0"))
+                fatores.append(
+                    f"{inconsistency.tipo.value}: -{weighted_points:.1f} pts "
+                    f"(R$ {inconsistency.valor_impacto:,.0f} = {pct:.1f}% do patrimônio)"
+                )
+            else:
+                fatores.append(f"{inconsistency.tipo.value}: -{weighted_points:.0f} pts")
+
+        # Subtract points for warnings (half base weight), skip informative ones
         for warning in self.warnings:
             if warning.informativo:
                 continue  # Don't count informative warnings in score
-            points = self.RISK_POINTS.get(warning.risco, 5) // 2
-            score -= points
+            base_points = self.RISK_POINTS.get(warning.risco, 5) // 2
+            weight = self._get_weight_factor(warning.valor_impacto)
+            weighted_points = Decimal(str(base_points)) * weight
+            score -= weighted_points
+
             if warning.campo:
-                fatores.append(f"Aviso em {warning.campo}: -{points} pts")
+                if warning.valor_impacto:
+                    fatores.append(f"Aviso em {warning.campo}: -{weighted_points:.1f} pts")
+                else:
+                    fatores.append(f"Aviso em {warning.campo}: -{weighted_points:.0f} pts")
 
         # Perfect score message
         if not self.inconsistencies and not any(
@@ -105,7 +163,7 @@ class RiskAnalyzer:
         ):
             fatores.append("Nenhuma inconsistência detectada - declaração conforme")
 
-        return RiskScore.from_score(score, fatores)
+        return RiskScore.from_score(int(score), fatores)
 
 
 def analyze_declaration(declaration: Declaration) -> AnalysisResult:
