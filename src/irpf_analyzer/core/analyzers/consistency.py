@@ -70,23 +70,32 @@ class ConsistencyAnalyzer:
             if b.lucro_prejuizo and b.lucro_prejuizo > 0
         )
 
-        # 4. Sale proceeds from alienations (money received from sales)
+        # 4. Sale proceeds from alienations (for informational purposes only)
+        # NOTE: We don't count this in recursos_totais because:
+        # - The asset value was already in patrimonio_anterior
+        # - Only the ganho_capital (profit) represents new resources
         valor_alienacoes = sum(
             a.valor_alienacao for a in self.declaration.alienacoes
             if a.valor_alienacao and a.valor_alienacao > 0
         )
 
-        # 5. Liquidated assets (CDB, LCA, LCI that matured - money becomes available)
-        # These went from positive value to zero, releasing cash
+        # 5. Liquidated assets value (for informational purposes only)
+        # NOTE: We don't count this in recursos_totais because:
+        # - The principal was already in patrimonio_anterior
+        # - The yield is already included in rendimentos_exclusivos (taxed at source)
         ativos_liquidados = self._get_liquidated_assets_value()
 
         # Total resources available for investment
+        # Only count actual NEW money:
+        # - renda_declarada: salary, dividends, interest (includes CDB/LCA yields)
+        # - ganho_capital: profit from sales (not the sale value itself)
+        # - lucro_acoes_exterior: profit from foreign stocks
         recursos_totais = (
             renda_declarada
             + ganho_capital
             + lucro_acoes_exterior
-            + valor_alienacoes
-            + ativos_liquidados
+            # NOT valor_alienacoes - principal was already in patrimony
+            # NOT ativos_liquidados - principal was already in patrimony
         )
 
         # === Calculate if resources explain patrimony variation ===

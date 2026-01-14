@@ -95,7 +95,14 @@ class RiskScore(BaseModel):
 class PatrimonyFlowAnalysis(BaseModel):
     """Detailed breakdown of patrimony variation vs available resources.
 
-    This shows how income, sales, and liquidated assets explain patrimony changes.
+    Only NEW money counts as resources:
+    - renda_declarada: salary, dividends, interest (yields from CDB/LCA already included)
+    - ganho_capital: PROFIT from sales (not the sale value - principal was already in patrimony)
+    - lucro_acoes_exterior: PROFIT from foreign stocks
+
+    NOT counted (informational only):
+    - valor_alienacoes: sale proceeds - principal was already in patrimonio_anterior
+    - ativos_liquidados: matured CDB/LCA - principal was already in patrimonio_anterior
     """
 
     # Patrimony variation
@@ -103,12 +110,14 @@ class PatrimonyFlowAnalysis(BaseModel):
     patrimonio_atual: Decimal = Field(default=Decimal("0"))
     variacao_patrimonial: Decimal = Field(default=Decimal("0"))
 
-    # Income sources
-    renda_declarada: Decimal = Field(default=Decimal("0"), description="Salary, pro-labore, etc.")
-    ganho_capital: Decimal = Field(default=Decimal("0"), description="Capital gains from alienations")
+    # Income sources (counted in recursos_totais)
+    renda_declarada: Decimal = Field(default=Decimal("0"), description="Salary, dividends, interest (incl. CDB/LCA yields)")
+    ganho_capital: Decimal = Field(default=Decimal("0"), description="Capital gains from alienations (profit only)")
     lucro_acoes_exterior: Decimal = Field(default=Decimal("0"), description="Profit from foreign stocks")
-    valor_alienacoes: Decimal = Field(default=Decimal("0"), description="Sale proceeds")
-    ativos_liquidados: Decimal = Field(default=Decimal("0"), description="Matured CDB/LCA/LCI")
+
+    # Informational only (NOT counted in recursos_totais - principal already in patrimony)
+    valor_alienacoes: Decimal = Field(default=Decimal("0"), description="Sale proceeds (info only, not in recursos)")
+    ativos_liquidados: Decimal = Field(default=Decimal("0"), description="Matured CDB/LCA/LCI (info only, not in recursos)")
 
     # Calculation
     recursos_totais: Decimal = Field(default=Decimal("0"))

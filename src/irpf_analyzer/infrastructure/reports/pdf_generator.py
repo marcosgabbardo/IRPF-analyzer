@@ -526,14 +526,14 @@ class PDFReportGenerator:
                 Paragraph("<b>Valor</b>", self.styles["TableCellBold"]),
             ],
             [
-                Paragraph("Renda declarada (salário, pró-labore, etc.)", self.styles["TableCell"]),
+                Paragraph("Renda declarada (salário, dividendos, rend. fixa)", self.styles["TableCell"]),
                 Paragraph(fmt(flow.renda_declarada), self.styles["TableCell"]),
             ],
         ]
 
         if flow.ganho_capital > 0:
             resources_data.append([
-                Paragraph("Ganho de capital (alienações)", self.styles["TableCell"]),
+                Paragraph("Ganho de capital (LUCRO das alienações)", self.styles["TableCell"]),
                 Paragraph(fmt(flow.ganho_capital), self.styles["TableCell"]),
             ])
 
@@ -543,23 +543,28 @@ class PDFReportGenerator:
                 Paragraph(fmt(flow.lucro_acoes_exterior), self.styles["TableCell"]),
             ])
 
-        if flow.valor_alienacoes > 0:
-            resources_data.append([
-                Paragraph("Valor de vendas/alienações", self.styles["TableCell"]),
-                Paragraph(fmt(flow.valor_alienacoes), self.styles["TableCell"]),
-            ])
-
-        if flow.ativos_liquidados > 0:
-            resources_data.append([
-                Paragraph("Ativos liquidados (CDB, LCA, LCI)", self.styles["TableCell"]),
-                Paragraph(fmt(flow.ativos_liquidados), self.styles["TableCell"]),
-            ])
-
         # Total row
         resources_data.append([
             Paragraph("<b>TOTAL DE RECURSOS</b>", self.styles["TableCellBold"]),
             Paragraph(f"<b>{fmt(flow.recursos_totais)}</b>", self.styles["TableCellBold"]),
         ])
+
+        # Informational values (NOT counted - principal already in patrimony)
+        if flow.valor_alienacoes > 0 or flow.ativos_liquidados > 0:
+            resources_data.append([
+                Paragraph("<i>--- Valores informativos (não contados) ---</i>", self.styles["TableCell"]),
+                Paragraph("", self.styles["TableCell"]),
+            ])
+            if flow.valor_alienacoes > 0:
+                resources_data.append([
+                    Paragraph("<i>Valor bruto de vendas</i>", self.styles["TableCell"]),
+                    Paragraph(f"<i>{fmt(flow.valor_alienacoes)}</i>", self.styles["TableCell"]),
+                ])
+            if flow.ativos_liquidados > 0:
+                resources_data.append([
+                    Paragraph("<i>Ativos liquidados (principal)</i>", self.styles["TableCell"]),
+                    Paragraph(f"<i>{fmt(flow.ativos_liquidados)}</i>", self.styles["TableCell"]),
+                ])
 
         resources_table = Table(resources_data, colWidths=[12 * cm, 6 * cm])
         resources_table.setStyle(

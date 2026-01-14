@@ -244,18 +244,23 @@ def analyze(
             flow_table.add_column("Fonte", style="cyan")
             flow_table.add_column("Valor", justify="right", style="green")
 
-            flow_table.add_row("Renda declarada (salário, pró-labore, etc.)", format_currency(flow.renda_declarada))
+            flow_table.add_row("Renda declarada (salário, dividendos, rend. fixa)", format_currency(flow.renda_declarada))
             if flow.ganho_capital > 0:
-                flow_table.add_row("Ganho de capital (alienações)", format_currency(flow.ganho_capital))
+                flow_table.add_row("Ganho de capital (LUCRO das alienações)", format_currency(flow.ganho_capital))
             if flow.lucro_acoes_exterior > 0:
                 flow_table.add_row("Lucro em ações estrangeiras", format_currency(flow.lucro_acoes_exterior))
-            if flow.valor_alienacoes > 0:
-                flow_table.add_row("Valor de vendas/alienações", format_currency(flow.valor_alienacoes))
-            if flow.ativos_liquidados > 0:
-                flow_table.add_row("Ativos liquidados (CDB, LCA, LCI)", format_currency(flow.ativos_liquidados))
 
             flow_table.add_row("", "")  # Empty row
             flow_table.add_row("[bold]TOTAL RECURSOS[/bold]", f"[bold]{format_currency(flow.recursos_totais)}[/bold]")
+
+            # Show informational values that are NOT counted (principal already in patrimony)
+            if flow.valor_alienacoes > 0 or flow.ativos_liquidados > 0:
+                flow_table.add_row("", "")
+                flow_table.add_row("[dim]--- Valores informativos (não contados) ---[/dim]", "")
+                if flow.valor_alienacoes > 0:
+                    flow_table.add_row("[dim]Valor bruto de vendas[/dim]", f"[dim]{format_currency(flow.valor_alienacoes)}[/dim]")
+                if flow.ativos_liquidados > 0:
+                    flow_table.add_row("[dim]Ativos liquidados (principal)[/dim]", f"[dim]{format_currency(flow.ativos_liquidados)}[/dim]")
 
             console.print(flow_table)
 

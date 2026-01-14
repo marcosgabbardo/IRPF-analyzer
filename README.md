@@ -23,7 +23,7 @@ Uma ferramenta CLI em Python para analisar arquivos `.DEC` e `.DBK` (declaraçõ
 
 - **Análise de Fluxo Patrimonial**
   - Cálculo detalhado de recursos disponíveis
-  - Soma de renda, ganho de capital, alienações e ativos liquidados
+  - Soma de renda (inclui rendimentos de renda fixa) + ganho de capital (lucro) + lucro em ações estrangeiras
   - Estimativa de despesas de vida
   - Verificação se variação patrimonial está explicada
 
@@ -149,29 +149,28 @@ Total despesas médicas: R$ 1.300,00
 ╰────────────────────────────────────────╯
 
 📊 Análise de Fluxo Patrimonial:
-                       Origem dos Recursos
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
-┃ Fonte                                       ┃           Valor ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
-│ Renda declarada (salário, pró-labore, etc.) │   R$ 180.000,00 │
-│ Ganho de capital (alienações)               │    R$ 50.000,00 │
-│ Valor de vendas/alienações                  │   R$ 100.000,00 │
-│ Ativos liquidados (CDB, LCA, LCI)           │    R$ 80.000,00 │
-│                                             │                 │
-│ TOTAL RECURSOS                              │   R$ 410.000,00 │
-└─────────────────────────────────────────────┴─────────────────┘
+                       Origem dos Recursos (Dinheiro Novo)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+┃ Fonte                                                   ┃           Valor ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+│ Renda declarada (salário, dividendos, rend. renda fixa) │   R$ 180.000,00 │
+│ Ganho de capital (LUCRO das alienações)                 │    R$ 50.000,00 │
+│ Lucro em ações estrangeiras                             │            R$ 0 │
+│                                                         │                 │
+│ TOTAL RECURSOS                                          │   R$ 230.000,00 │
+└─────────────────────────────────────────────────────────┴─────────────────┘
 
 ╭───────── Cálculo de Compatibilidade ─────────╮
-│ Recursos totais: R$ 410.000,00               │
+│ Recursos totais: R$ 230.000,00               │
 │ (-) Despesas de vida estimadas: R$ 54.000,00 │
-│ (=) Recursos disponíveis: R$ 356.000,00      │
+│ (=) Recursos disponíveis: R$ 176.000,00      │
 │ (-) Variação patrimonial: R$ 250.000,00      │
-│ (=) Saldo: R$ 106.000,00                     │
+│ (=) Saldo: -R$ 74.000,00                     │
 │                                              │
-│ ✅ EXPLICADO                                 │
+│ ⚠️  ATENÇÃO - Verificar origem dos recursos  │
 ╰──────────────────────────────────────────────╯
-ℹ️  Despesas de vida estimadas em 30% da renda declarada. Este é um valor
-conservador - contribuintes com renda acima de R$ 200.000 usam 30%, demais usam 50%.
+ℹ️  Nota: Valor bruto de vendas e ativos liquidados não são contados
+porque o principal já existia no patrimônio anterior.
 
 ╭── 🎯 Índice de Conformidade Fiscal ───╮
 │ Conformidade: 95%                     │
@@ -341,20 +340,32 @@ Mostra informações básicas e preview do conteúdo do arquivo.
 O sistema calcula se a variação patrimonial está explicada pelos recursos disponíveis:
 
 ```
-Recursos Totais = Renda Declarada
-                + Ganho de Capital (alienações)
+Recursos Totais = Renda Declarada (salário, dividendos, rendimentos de CDB/LCA/LCI)
+                + Ganho de Capital (LUCRO das alienações, não o valor bruto)
                 + Lucro em Ações Estrangeiras
-                + Valor de Vendas/Alienações
-                + Ativos Liquidados (CDB, LCA, LCI que venceram)
+
+NÃO são contados (pois o principal já existia no patrimônio anterior):
+- Valor bruto de vendas/alienações
+- Valor bruto de ativos liquidados (CDB, LCA, LCI que venceram)
 
 Recursos Disponíveis = Recursos Totais - Despesas de Vida Estimadas
 
 Se Variação Patrimonial <= Recursos Disponíveis × 1.5 → EXPLICADO ✅
 ```
 
+**Por que não contar ativos liquidados e valor de vendas?**
+
+Se você tinha um CDB de R$ 100.000 que venceu e virou R$ 110.000 na conta:
+- O patrimônio cresceu apenas R$ 10.000 (o rendimento)
+- O rendimento já está incluído em "Renda Declarada" (tributação exclusiva)
+- Contar os R$ 100.000 novamente seria contagem dupla
+
 **Despesas de Vida Estimadas:**
-- 30% da renda para contribuintes com renda > R$ 200.000
-- 50% da renda para demais contribuintes
+- 30% da renda para contribuintes com renda > R$ 500.000
+- 50% para renda entre R$ 250.000 e R$ 500.000
+- 65% para renda entre R$ 100.000 e R$ 250.000
+- 80% para renda entre R$ 50.000 e R$ 100.000
+- 100% para renda abaixo de R$ 50.000
 
 ### Constantes Fiscais de Referência (IRPF 2025)
 
