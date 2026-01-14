@@ -247,24 +247,35 @@ class DECParser:
         )
 
     def _parse_totals(self) -> dict[str, Decimal]:
-        """Parse summary totals from line type 20."""
+        """Parse summary totals from line type 20.
+
+        Field positions discovered from real DEC file analysis:
+        - Position 106-119: Rendimentos tributáveis (13 digits, 2 decimals)
+        - Position 227-240: Imposto devido (13 digits, 2 decimals)
+        - Position 471-482: Rendimentos isentos e não tributáveis (11 digits, 2 decimals)
+        - Position 500-508: Imposto pago (total) (8 digits, 2 decimals)
+
+        Note: Field widths vary. Positions verified against real file with known values.
+        """
         totals: dict[str, Decimal] = {}
 
         for line in self.lines:
             if line.startswith("20") or line.startswith("208"):
                 # Line 20 contains financial summary
-                # Structure is complex with many fields
-                # Based on analysis:
-                # Position ~100+: rendimentos tributáveis
-                # Position ~200+: deduções
-                # Position ~300+: imposto devido
+                if len(line) > 520:
+                    # Field positions based on DEC layout analysis
+                    totals["rendimentos_tributaveis"] = _parse_decimal(line[106:119])
+                    totals["imposto_devido"] = _parse_decimal(line[227:240])
 
-                cpf_start = 2 if line.startswith("20") else 3
+                    # Rendimentos isentos e não tributáveis (dividends, poupança, etc.)
+                    # 11-digit field at position 471-482
+                    totals["rendimentos_isentos"] = _parse_decimal(line[471:482])
 
-                # Find the CPF position and work from there
-                if len(line) > 400:
-                    # Field positions based on DEC layout analysis:
-                    # Rendimentos tributáveis: 13-digit field at position 106
+                    # Imposto pago (total) - 8-digit field at position 500-508
+                    totals["imposto_pago"] = _parse_decimal(line[500:508])
+
+                elif len(line) > 400:
+                    # Fallback for shorter lines
                     totals["rendimentos_tributaveis"] = _parse_decimal(line[106:119])
                     totals["imposto_devido"] = _parse_decimal(line[227:240])
                     totals["imposto_pago"] = _parse_decimal(line[257:270])
@@ -438,24 +449,23 @@ class DECParser:
         return mapping.get(codigo, GrupoBem.OUTROS_BENS)
 
     def _parse_alienacoes(self) -> list[Alienacao]:
-        """Parse alienations/sales from lines type 63."""
+        """Parse alienations/sales from lines type 63.
+
+        Field positions discovered from real DEC file analysis:
+        - Position 36-96: Nome do bem (60 chars)
+        - Position 449-458: Valor recebido/alienação (9 digits, 2 decimals)
+        - Position 531-538: Custo de aquisição (7 digits, 2 decimals)
+        - Position 542-551: Ganho de capital (9 digits, 2 decimals)
+        - Position 617-625: Imposto devido (8 digits, 2 decimals)
+
+        Note: Field widths vary. Positions verified against real file with known values.
+        """
         alienacoes = []
 
         for line in self.lines:
             if line.startswith("63"):
-                # Line 63 structure (observed from real file):
-                # 63 + CPF(11) + CPF(11) + GRUPO(2) + COD(2) + FLAGS(4) + SEQ(4) +
-                # NOME_BEM(60) + ... + CNPJ(14) + ... + TIPO_OPERACAO(70) + TIPO_BEM + DATA + VALORES
-                #
-                # Key positions discovered:
-                # - 36-96: Nome do bem (60 chars)
-                # - ~188-202: CNPJ (14 digits)
-                # - ~250-320: Tipo operação
-                # - ~390: Data (DDMMYYYY)
-                # - ~600+: Valores (ganho de capital, etc.)
-
                 try:
-                    # Nome do bem/empresa
+                    # Nome do bem/empresa (position 36-96)
                     nome = line[36:96].strip()
 
                     # Try to find CNPJ (14 consecutive digits after position 150)
@@ -469,7 +479,6 @@ class DECParser:
                     # Tipo de operação (look for "ALIENAC" keyword area)
                     tipo_operacao = ""
                     if "ALIENAC" in line:
-                        # Find position and extract operation type
                         idx = line.find("ALIENAC")
                         tipo_operacao = line[idx:idx+70].strip()
 
@@ -490,13 +499,25 @@ class DECParser:
                                 data_alienacao = parsed
                                 break
 
-                    # Try to extract ganho de capital value
-                    ganho_capital = Decimal("0")
+                    # Extract financial values from verified positions
                     valor_alienacao = Decimal("0")
+                    custo_aquisicao = Decimal("0")
+                    ganho_capital = Decimal("0")
+                    imposto_devido = Decimal("0")
 
-                    # Valor alienação: 13-digit field at position 612 (right-aligned)
-                    if len(line) >= 625:
-                        valor_alienacao = _parse_decimal(line[612:625])
+                    if len(line) >= 555:
+                        # Valor recebido/alienação: position 449-458 (9 digits)
+                        valor_alienacao = _parse_decimal(line[449:458])
+
+                        # Custo de aquisição: position 531-538 (7 digits)
+                        custo_aquisicao = _parse_decimal(line[531:538])
+
+                        # Ganho de capital: position 542-551 (9 digits)
+                        ganho_capital = _parse_decimal(line[542:551])
+
+                    if len(line) >= 630:
+                        # Imposto devido: position 617-625 (8 digits)
+                        imposto_devido = _parse_decimal(line[617:625])
 
                     if nome:
                         alienacoes.append(Alienacao(
@@ -506,7 +527,9 @@ class DECParser:
                             tipo_bem=tipo_bem,
                             data_alienacao=data_alienacao,
                             valor_alienacao=valor_alienacao,
+                            custo_aquisicao=custo_aquisicao,
                             ganho_capital=ganho_capital,
+                            imposto_devido=imposto_devido,
                         ))
 
                 except (IndexError, ValueError):
