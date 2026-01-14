@@ -26,6 +26,11 @@ from irpf_analyzer.shared.statistics import (
     detectar_outliers_iqr,
     detectar_valores_redondos,
 )
+from irpf_analyzer.core.rules.tax_constants import (
+    LIMITE_DESPESA_MEDICA_PF,
+    IDADE_LIMITE_FILHO,
+    IDADE_LIMITE_UNIVERSITARIO,
+)
 
 
 class PatternAnalyzer:
@@ -74,6 +79,8 @@ class PatternAnalyzer:
         # Fraud patterns
         self._check_cpf_cnpj_invalidos()
         self._check_despesas_medicas_ficticias()
+        self._check_despesa_medica_pf_alta()
+        self._check_dependente_idade()
 
         # Financial inconsistency patterns
         self._check_compras_sem_lastro()
@@ -375,6 +382,128 @@ class PatternAnalyzer:
                         valor_impacto=valor * count,
                     )
                 )
+
+    def _check_despesa_medica_pf_alta(self) -> None:
+        """Detect high-value medical expenses with individual providers (PF).
+
+        Medical expenses paid to individuals (CPF) are harder for the IRS to
+        cross-reference. High-value payments to individuals (> R$ 5,000) may
+        receive extra scrutiny during audit.
+
+        Not an error, but requires robust documentation.
+        """
+        from irpf_analyzer.shared.validators import validar_cpf
+
+        for ded in self.declaration.deducoes:
+            if ded.tipo != TipoDeducao.DESPESAS_MEDICAS:
+                continue
+
+            if ded.valor <= 0:
+                continue
+
+            # Check if provider is a CPF (individual) vs CNPJ (company)
+            cpf_prestador = ded.cpf_prestador
+            if not cpf_prestador:
+                continue
+
+            # Validate it's actually a CPF format (11 digits)
+            digits_only = "".join(filter(str.isdigit, cpf_prestador))
+            if len(digits_only) != 11:
+                continue
+
+            # Check if value exceeds threshold
+            if ded.valor > LIMITE_DESPESA_MEDICA_PF:
+                # Validate the CPF is valid
+                valido, _ = validar_cpf(cpf_prestador)
+                status = "válido" if valido else "inválido"
+
+                self.warnings.append(
+                    Warning(
+                        mensagem=(
+                            f"Despesa médica alta com pessoa física (CPF {status}): "
+                            f"R$ {ded.valor:,.2f} - {ded.nome_prestador or 'Nome não informado'}. "
+                            f"Valores acima de R$ {LIMITE_DESPESA_MEDICA_PF:,.0f} com PF "
+                            f"requerem documentação robusta (recibos, NF quando aplicável)."
+                        ),
+                        risco=RiskLevel.MEDIUM,
+                        campo="deducoes",
+                        categoria=WarningCategory.PADRAO,
+                        valor_impacto=ded.valor,
+                    )
+                )
+
+    def _check_dependente_idade(self) -> None:
+        """Validate dependent age against dependent type.
+
+        Rules:
+        - Filho/enteado até 21 anos OR até 24 se universitário
+        - Filho/enteado incapaz: any age
+        - Menor pobre: até 21 anos
+
+        Age incompatibility may cause automatic rejection.
+        """
+        from irpf_analyzer.core.models.enums import TipoDependente
+
+        for dep in self.declaration.dependentes:
+            idade = dep.idade
+            if idade is None:
+                # No birth date available, can't validate
+                continue
+
+            # Check based on dependent type
+            if dep.tipo in (
+                TipoDependente.FILHO_ENTEADO_ATE_21,
+                TipoDependente.IRMAO_NETO_BISNETO,
+            ):
+                # Must be up to 21 years old
+                if idade > IDADE_LIMITE_FILHO:
+                    self.inconsistencies.append(
+                        Inconsistency(
+                            tipo=InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL,
+                            descricao=(
+                                f"Dependente {dep.nome} tem {idade} anos, mas tipo "
+                                f"'{dep.tipo.value}' exige até {IDADE_LIMITE_FILHO} anos."
+                            ),
+                            risco=RiskLevel.HIGH,
+                            recomendacao=(
+                                f"Alterar para tipo 'universitário' (se aplicável e até "
+                                f"{IDADE_LIMITE_UNIVERSITARIO} anos) ou remover dependente."
+                            ),
+                        )
+                    )
+
+            elif dep.tipo == TipoDependente.FILHO_ENTEADO_UNIVERSITARIO:
+                # Must be up to 24 years old and studying
+                if idade > IDADE_LIMITE_UNIVERSITARIO:
+                    self.inconsistencies.append(
+                        Inconsistency(
+                            tipo=InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL,
+                            descricao=(
+                                f"Dependente {dep.nome} tem {idade} anos, mas tipo "
+                                f"'universitário' exige até {IDADE_LIMITE_UNIVERSITARIO} anos."
+                            ),
+                            risco=RiskLevel.HIGH,
+                            recomendacao="Verificar se dependente ainda está cursando ensino superior ou remover.",
+                        )
+                    )
+
+            elif dep.tipo == TipoDependente.MENOR_POBRE:
+                # Must be up to 21 years old
+                if idade > IDADE_LIMITE_FILHO:
+                    self.inconsistencies.append(
+                        Inconsistency(
+                            tipo=InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL,
+                            descricao=(
+                                f"Dependente {dep.nome} (menor pobre) tem {idade} anos, "
+                                f"acima do limite de {IDADE_LIMITE_FILHO} anos."
+                            ),
+                            risco=RiskLevel.HIGH,
+                            recomendacao="Remover dependente ou verificar data de nascimento.",
+                        )
+                    )
+
+            # FILHO_ENTEADO_INCAPAZ has no age limit
+            # CONJUGE, COMPANHEIRO, PAIS_AVOS_BISAVOS have no upper age limit
 
     # ========================
     # FINANCIAL INCONSISTENCY

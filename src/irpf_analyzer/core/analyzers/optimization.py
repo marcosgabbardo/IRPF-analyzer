@@ -11,6 +11,14 @@ from irpf_analyzer.core.rules.tax_constants import (
     ECONOMIA_MINIMA_SUGESTAO,
     ESPACO_MINIMO_PGBL,
     LIMITE_DOACOES_PERCENTUAL,
+    LIMITE_DOACAO_FIA,
+    LIMITE_DOACAO_IDOSO,
+    LIMITE_DOACAO_CULTURA,
+    LIMITE_DOACAO_AUDIOVISUAL,
+    LIMITE_DOACAO_ESPORTE,
+    LIMITE_DOACAO_PRONON,
+    LIMITE_DOACAO_PRONAS,
+    LIMITE_DOACAO_GLOBAL,
     LIMITE_EDUCACAO_PESSOA,
     LIMITE_PGBL_PERCENTUAL,
     LIMITE_SIMPLIFICADA,
@@ -51,6 +59,7 @@ class OptimizationAnalyzer:
         self._check_pgbl_opportunity()
         self._check_education_limit()
         self._check_incentive_donations()
+        self._check_incentive_donations_detailed()
         self._check_livro_caixa()
 
         return sorted(self.suggestions, key=lambda s: s.prioridade)
@@ -224,6 +233,74 @@ class OptimizationAnalyzer:
                         prioridade=2,
                     )
                 )
+
+    def _check_incentive_donations_detailed(self) -> None:
+        """Provide detailed breakdown of incentive donation options.
+
+        Different donation types have different limits, all sharing a 6% global cap:
+
+        Category Limits (% of tax owed):
+        - FIA (Criança/Adolescente): 3%
+        - Fundo do Idoso: 3%
+        - Lei Rouanet (Cultura): 6%
+        - Lei Audiovisual: 6%
+        - Lei Incentivo ao Esporte: 6%
+        - PRONON (Oncologia): 1%
+        - PRONAS (Pessoa com Deficiência): 1%
+
+        Global limit: 6% of tax owed.
+
+        This is informational - shows all options even if some are being used.
+        """
+        imposto_devido = self.declaration.imposto_devido
+
+        # Skip if no tax owed
+        if imposto_devido <= 0:
+            return
+
+        # Calculate limits for each category
+        limite_fia = imposto_devido * LIMITE_DOACAO_FIA
+        limite_idoso = imposto_devido * LIMITE_DOACAO_IDOSO
+        limite_cultura = imposto_devido * LIMITE_DOACAO_CULTURA
+        limite_audiovisual = imposto_devido * LIMITE_DOACAO_AUDIOVISUAL
+        limite_esporte = imposto_devido * LIMITE_DOACAO_ESPORTE
+        limite_pronon = imposto_devido * LIMITE_DOACAO_PRONON
+        limite_pronas = imposto_devido * LIMITE_DOACAO_PRONAS
+        limite_global = imposto_devido * LIMITE_DOACAO_GLOBAL
+
+        # Get current donations
+        doacoes_atuais = self._get_incentive_donations()
+
+        # Only show if there's significant space available
+        if doacoes_atuais >= limite_global * Decimal("0.9"):
+            return  # Already using 90%+ of the limit
+
+        # Build detailed breakdown
+        detalhes = [
+            f"• FIA (Criança/Adolescente): até R$ {limite_fia:,.2f} (3%)",
+            f"• Fundo do Idoso: até R$ {limite_idoso:,.2f} (3%)",
+            f"• Lei Rouanet (Cultura): até R$ {limite_cultura:,.2f} (6%)",
+            f"• Lei do Audiovisual: até R$ {limite_audiovisual:,.2f} (6%)",
+            f"• Lei Incentivo ao Esporte: até R$ {limite_esporte:,.2f} (6%)",
+            f"• PRONON (Oncologia): até R$ {limite_pronon:,.2f} (1%)",
+            f"• PRONAS (Deficiência): até R$ {limite_pronas:,.2f} (1%)",
+        ]
+
+        self.suggestions.append(
+            Suggestion(
+                titulo="Detalhamento: Limites por Tipo de Doação",
+                descricao=(
+                    f"Limite global: R$ {limite_global:,.2f} (6% do IR devido de "
+                    f"R$ {imposto_devido:,.2f}). "
+                    f"Você já utilizou R$ {doacoes_atuais:,.2f}.\n\n"
+                    f"Limites por categoria:\n" + "\n".join(detalhes) + "\n\n"
+                    f"Nota: FIA e Fundo do Idoso compartilham limite de 6%. "
+                    f"Doações feitas até 31/12 do ano-calendário são deduzidas do imposto."
+                ),
+                economia_potencial=limite_global - doacoes_atuais,
+                prioridade=4,  # Lower priority - informational
+            )
+        )
 
     def _check_livro_caixa(self) -> None:
         """Check if self-employed professionals are using livro-caixa.

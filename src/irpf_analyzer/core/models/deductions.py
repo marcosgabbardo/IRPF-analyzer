@@ -20,7 +20,10 @@ class Deducao(BaseModel):
         default=None, description="Name of beneficiary"
     )
     cnpj_prestador: Optional[str] = Field(
-        default=None, description="CNPJ of service provider"
+        default=None, description="CNPJ of service provider (if company)"
+    )
+    cpf_prestador: Optional[str] = Field(
+        default=None, description="CPF of service provider (if individual)"
     )
     nome_prestador: Optional[str] = Field(
         default=None, description="Name of service provider"

@@ -22,8 +22,61 @@ DEDUCAO_DEPENDENTE = Decimal("2275.08")
 # PGBL (private pension) limit: 12% of gross taxable income
 LIMITE_PGBL_PERCENTUAL = Decimal("0.12")
 
-# Incentive donations limit: 6% of tax owed
+# Incentive donations limit: 6% of tax owed (global maximum)
 LIMITE_DOACOES_PERCENTUAL = Decimal("0.06")
+
+# === Detailed Incentive Donation Limits (% of tax owed) ===
+# FIA (Fundo da Infância e Adolescência) and Fundo do Idoso share 6% limit
+LIMITE_DOACAO_FIA = Decimal("0.03")  # 3% - Fundo da Infância e Adolescência
+LIMITE_DOACAO_IDOSO = Decimal("0.03")  # 3% - Fundo do Idoso
+LIMITE_DOACAO_CULTURA = Decimal("0.06")  # 6% - Lei de Incentivo à Cultura (Rouanet)
+LIMITE_DOACAO_AUDIOVISUAL = Decimal("0.06")  # 6% - Lei do Audiovisual
+LIMITE_DOACAO_ESPORTE = Decimal("0.06")  # 6% - Lei de Incentivo ao Esporte
+LIMITE_DOACAO_PRONON = Decimal("0.01")  # 1% - Programa Nacional de Apoio à Oncologia
+LIMITE_DOACAO_PRONAS = Decimal("0.01")  # 1% - Programa de Apoio à Pessoa com Deficiência
+LIMITE_DOACAO_GLOBAL = Decimal("0.06")  # 6% maximum combined
+
+# === Capital Gains Exemptions ===
+# Exemption for sale of single property up to this value
+LIMITE_ISENCAO_UNICO_IMOVEL = Decimal("440000")  # R$ 440k
+# Days to reinvest proceeds for capital gains exemption (Lei 11.196/2005)
+PRAZO_REINVESTIMENTO_IMOVEL = 180  # days
+# Years between exemption uses
+PRAZO_ENTRE_ISENCOES = 5  # years
+
+# === Vehicle Depreciation Rates ===
+# Expected remaining value by vehicle age
+DEPRECIACAO_VEICULO = {
+    1: Decimal("0.85"),   # 1 year old = 85% of new value
+    2: Decimal("0.75"),   # 2 years = 75%
+    3: Decimal("0.65"),   # 3 years = 65%
+    5: Decimal("0.50"),   # 5 years = 50%
+    7: Decimal("0.35"),   # 7 years = 35%
+    10: Decimal("0.25"),  # 10 years = 25%
+    15: Decimal("0.15"),  # 15 years = 15%
+}
+
+# === FUNPRESP (Federal Servants) ===
+# Additional deduction limit for federal public servants
+LIMITE_FUNPRESP_ADICIONAL = Decimal("0.085")  # 8.5% additional to PGBL
+
+# === Cross-Validation Thresholds ===
+# e-Financeira reporting threshold (bank balance > this is reported)
+LIMITE_EFINANCEIRA = Decimal("5000")  # R$ 5k
+# DCBE reporting threshold (foreign assets > USD 1M)
+LIMITE_DCBE_USD = Decimal("1000000")  # USD 1M
+
+# === Detection Thresholds ===
+# Medical expenses with individual (PF) above this value trigger alert
+LIMITE_DESPESA_MEDICA_PF = Decimal("5000")  # R$ 5k per provider
+# Rental yield below this percentage is suspicious (annual)
+YIELD_ALUGUEL_MINIMO = Decimal("0.02")  # 2%
+# Rental yield above this percentage is suspicious (annual)
+YIELD_ALUGUEL_MAXIMO = Decimal("0.10")  # 10%
+
+# === Dependent Age Limits ===
+IDADE_LIMITE_FILHO = 21  # years (basic limit)
+IDADE_LIMITE_UNIVERSITARIO = 24  # years (if in university)
 
 # === Tax Brackets (Monthly, IRPF 2025) ===
 # Format: (base_mensal, aliquota, deducao_parcela)

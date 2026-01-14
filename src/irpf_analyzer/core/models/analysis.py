@@ -55,6 +55,20 @@ class InconsistencyType(str, Enum):
     DESPESAS_MEDICAS_CONSTANTES = "despesas_medicas_constantes"
     PADRAO_LIQUIDACAO_SUSPEITO = "padrao_liquidacao_suspeito"
 
+    # Phase 2 detections (v2.0)
+    DESPESA_MEDICA_PF_ALTA = "despesa_medica_pf_alta"
+    DEPENDENTE_IDADE_INCOMPATIVEL = "dependente_idade_incompativel"
+    YIELD_ALUGUEL_INCOMPATIVEL = "yield_aluguel_incompativel"
+    VEICULO_VALOR_IDADE_INCOMPATIVEL = "veiculo_valor_idade"
+    IMOVEL_SUBAVALIADO = "imovel_subavaliado"
+    RENDA_CONCENTRADA_DEZEMBRO = "renda_concentrada_dezembro"
+
+    # Cross-validation patterns (simulated checks)
+    CRUZAMENTO_DIRF_DIVERGENTE = "cruzamento_dirf"
+    CRUZAMENTO_DIMOB_DIVERGENTE = "cruzamento_dimob"
+    CRUZAMENTO_DOC_DIVERGENTE = "cruzamento_doc"
+    CRUZAMENTO_EFINANCEIRA_DIVERGENTE = "cruzamento_efinanceira"
+
 
 class Inconsistency(BaseModel):
     """An inconsistency found in the declaration."""

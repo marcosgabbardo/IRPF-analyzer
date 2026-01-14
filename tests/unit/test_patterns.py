@@ -436,6 +436,229 @@ class TestStatisticalPatterns:
         assert len(outlier_warnings) > 0
 
 
+class TestHighValueMedicalExpensePF:
+    """Tests for high-value medical expense with individual providers (PF)."""
+
+    def test_detects_high_medical_expense_with_cpf(self):
+        """Test detection of high-value medical expense paid to individual (CPF)."""
+        from datetime import date
+
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            deducoes=[
+                Deducao(
+                    tipo=TipoDeducao.DESPESAS_MEDICAS,
+                    valor=Decimal("7500"),  # > R$ 5000 threshold
+                    cpf_prestador="11144477735",  # Valid CPF
+                    nome_prestador="Dr. Fulano",
+                ),
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        # High value PF expense should trigger warning
+        pf_warnings = [w for w in warnings if "pessoa física" in w.mensagem.lower()]
+        assert len(pf_warnings) > 0
+        # Check value is mentioned (format may vary by locale)
+        assert "7,500" in pf_warnings[0].mensagem or "7.500" in pf_warnings[0].mensagem or "7500" in pf_warnings[0].mensagem
+
+    def test_no_warning_for_low_value_pf_expense(self):
+        """Test that low-value PF expenses don't trigger warning."""
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            deducoes=[
+                Deducao(
+                    tipo=TipoDeducao.DESPESAS_MEDICAS,
+                    valor=Decimal("3000"),  # Below R$ 5000 threshold
+                    cpf_prestador="11144477735",
+                    nome_prestador="Dr. Fulano",
+                ),
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        pf_warnings = [w for w in warnings if "pessoa física" in w.mensagem.lower()]
+        assert len(pf_warnings) == 0
+
+    def test_no_warning_for_cnpj_provider(self):
+        """Test that high-value expenses with CNPJ don't trigger this warning."""
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            deducoes=[
+                Deducao(
+                    tipo=TipoDeducao.DESPESAS_MEDICAS,
+                    valor=Decimal("10000"),  # High value
+                    cnpj_prestador="11222333000181",  # CNPJ, not CPF
+                    nome_prestador="Clínica ABC",
+                ),
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        pf_warnings = [w for w in warnings if "pessoa física" in w.mensagem.lower()]
+        assert len(pf_warnings) == 0
+
+
+class TestDependentAgeValidation:
+    """Tests for dependent age validation."""
+
+    def test_detects_overage_child_dependent(self):
+        """Test detection of child dependent over 21 years old."""
+        from datetime import date
+
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            dependentes=[
+                Dependente(
+                    tipo=TipoDependente.FILHO_ENTEADO_ATE_21,
+                    cpf="11144477735",
+                    nome="João Silva",
+                    data_nascimento=date(2000, 1, 1),  # ~25 years old (over 21)
+                )
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        age_issues = [
+            i for i in inconsistencies
+            if i.tipo == InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL
+        ]
+        assert len(age_issues) > 0
+        assert age_issues[0].risco == RiskLevel.HIGH
+        assert "21" in age_issues[0].descricao
+
+    def test_detects_overage_university_dependent(self):
+        """Test detection of university dependent over 24 years old."""
+        from datetime import date
+
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            dependentes=[
+                Dependente(
+                    tipo=TipoDependente.FILHO_ENTEADO_UNIVERSITARIO,
+                    cpf="11144477735",
+                    nome="Maria Silva",
+                    data_nascimento=date(1998, 1, 1),  # ~28 years old (over 24)
+                )
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        age_issues = [
+            i for i in inconsistencies
+            if i.tipo == InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL
+        ]
+        assert len(age_issues) > 0
+        assert "24" in age_issues[0].descricao or "universitário" in age_issues[0].descricao.lower()
+
+    def test_no_issue_for_valid_age_child(self):
+        """Test that valid age child dependent doesn't trigger issue."""
+        from datetime import date
+
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            dependentes=[
+                Dependente(
+                    tipo=TipoDependente.FILHO_ENTEADO_ATE_21,
+                    cpf="11144477735",
+                    nome="Pedro Silva",
+                    data_nascimento=date(2010, 1, 1),  # ~15 years old (valid)
+                )
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        age_issues = [
+            i for i in inconsistencies
+            if i.tipo == InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL
+        ]
+        assert len(age_issues) == 0
+
+    def test_no_age_limit_for_incapacitated_dependent(self):
+        """Test that incapacitated dependent has no age limit."""
+        from datetime import date
+
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            dependentes=[
+                Dependente(
+                    tipo=TipoDependente.FILHO_ENTEADO_INCAPAZ,
+                    cpf="11144477735",
+                    nome="Carlos Silva",
+                    data_nascimento=date(1980, 1, 1),  # ~45 years old (valid for incapaz)
+                )
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        age_issues = [
+            i for i in inconsistencies
+            if i.tipo == InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL
+        ]
+        assert len(age_issues) == 0
+
+    def test_no_validation_without_birth_date(self):
+        """Test that no validation occurs when birth date is missing."""
+        decl = Declaration(
+            contribuinte=Contribuinte(cpf="52998224725", nome="Test"),
+            ano_exercicio=2025,
+            ano_calendario=2024,
+            tipo_declaracao=TipoDeclaracao.COMPLETA,
+            dependentes=[
+                Dependente(
+                    tipo=TipoDependente.FILHO_ENTEADO_ATE_21,
+                    cpf="11144477735",
+                    nome="Ana Silva",
+                    # No birth date provided
+                )
+            ],
+        )
+
+        analyzer = PatternAnalyzer(decl)
+        inconsistencies, warnings = analyzer.analyze()
+
+        age_issues = [
+            i for i in inconsistencies
+            if i.tipo == InconsistencyType.DEPENDENTE_IDADE_INCOMPATIVEL
+        ]
+        assert len(age_issues) == 0
+
+
 class TestAnalyzePatternsFunction:
     """Tests for convenience function."""
 
