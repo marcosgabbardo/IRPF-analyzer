@@ -344,12 +344,14 @@ class CrossValidationAnalyzer:
 
         Property managers report all rental payments via DIMOB.
         Rental income must match manager reports.
+        Uses built properties only (excludes land/terrenos which are not rentable).
         """
-        # Check if has properties but no rental income
-        imoveis = [
+        # Check if has built properties but no rental income
+        # Excludes terrenos (code 13) and terra nua (code 18) as they are not typically rented
+        imoveis_edificados = [
             b for b in self.declaration.bens_direitos
-            if b.codigo in PatternAnalyzerCodes.CODIGOS_IMOVEIS
-            and b.situacao_atual > Decimal("200000")  # Significant value
+            if b.codigo in PatternAnalyzerCodes.CODIGOS_IMOVEIS_EDIFICADOS
+            and b.situacao_atual > 0
         ]
 
         renda_aluguel = sum(
@@ -357,13 +359,13 @@ class CrossValidationAnalyzer:
             if r.tipo == TipoRendimento.ALUGUEIS
         )
 
-        # Multiple high-value properties but no rental income
-        if len(imoveis) >= 2 and renda_aluguel == 0:
-            total_imoveis = sum(i.situacao_atual for i in imoveis)
+        # Multiple built properties but no rental income
+        if len(imoveis_edificados) >= 2 and renda_aluguel == 0:
+            total_imoveis = sum(i.situacao_atual for i in imoveis_edificados)
             self.warnings.append(
                 Warning(
                     mensagem=(
-                        f"Possui {len(imoveis)} imóveis (R$ {total_imoveis:,.2f}) "
+                        f"Possui {len(imoveis_edificados)} imóveis edificados (R$ {total_imoveis:,.2f}) "
                         f"sem renda de aluguel declarada. Se algum está alugado, "
                         f"DIMOB reportará e haverá cruzamento automático."
                     ),
@@ -403,6 +405,8 @@ class PatternAnalyzerCodes:
     """Asset codes for cross-validation checks."""
 
     CODIGOS_IMOVEIS = {"11", "12", "13", "14", "15", "16", "17", "18", "19"}
+    # Imóveis edificados (excluindo terrenos - código 13 e terra nua - código 18)
+    CODIGOS_IMOVEIS_EDIFICADOS = {"11", "12", "14", "15", "16", "17", "19"}
     CODIGOS_VEICULOS = {"21", "22", "23", "24", "25", "26", "27", "28", "29"}
     CODIGOS_PARTICIPACOES = {"31", "32", "39"}
 

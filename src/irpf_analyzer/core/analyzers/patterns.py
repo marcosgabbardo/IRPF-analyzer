@@ -61,6 +61,8 @@ class PatternAnalyzer:
     # Asset codes by category (IRPF uses codigo, not grupo, to identify asset type)
     # The grupo field in IRPF display is COMPUTED from codigo, not stored directly
     CODIGOS_IMOVEIS = {"11", "12", "13", "14", "15", "16", "17", "18", "19"}  # 11-19
+    # Imóveis edificados (excluindo terrenos - código 13) para verificação de aluguel
+    CODIGOS_IMOVEIS_EDIFICADOS = {"11", "12", "14", "15", "16", "17", "19"}  # Exceto 13 (terreno) e 18 (terra nua)
     CODIGOS_VEICULOS = {"21", "22", "23", "24", "25", "26", "27", "28", "29"}  # 21-29
     CODIGOS_PARTICIPACOES = {"31", "32", "39"}  # Quotas, ações, participações
 
@@ -72,6 +74,7 @@ class PatternAnalyzer:
         self._despesas_medicas: list | None = None
         self._valores_deducao: list[Decimal] | None = None
         self._imoveis: list | None = None
+        self._imoveis_edificados: list | None = None
         self._veiculos: list | None = None
         self._participacoes: list | None = None
 
@@ -101,6 +104,19 @@ class PatternAnalyzer:
                 if b.codigo in self.CODIGOS_IMOVEIS and b.situacao_atual > 0
             ]
         return self._imoveis
+
+    @property
+    def imoveis_edificados(self) -> list:
+        """Cached list of built properties (excluding land/terrenos).
+
+        Used for rental income verification since land is not typically rented.
+        """
+        if self._imoveis_edificados is None:
+            self._imoveis_edificados = [
+                b for b in self.declaration.bens_direitos
+                if b.codigo in self.CODIGOS_IMOVEIS_EDIFICADOS and b.situacao_atual > 0
+            ]
+        return self._imoveis_edificados
 
     @property
     def veiculos(self) -> list:
@@ -302,13 +318,14 @@ class PatternAnalyzer:
                 )
 
     def _check_imoveis_sem_aluguel(self) -> None:
-        """Detect properties that may be rented without declaring income.
+        """Detect built properties that may be rented without declaring income.
 
-        If taxpayer owns multiple properties but declares no rental income,
-        it may indicate income omission.
+        If taxpayer owns multiple built properties but declares no rental income,
+        it may indicate income omission. Excludes land/terrenos (code 13) and
+        terra nua (code 18) as these are not typically rented.
         """
-        # Use cached property - if more than 1 property, check for rental income
-        if len(self.imoveis) <= 1:
+        # Use built properties only (excludes land which is not rentable)
+        if len(self.imoveis_edificados) <= 1:
             return
 
         # Check for rental income in rendimentos
@@ -322,11 +339,11 @@ class PatternAnalyzer:
                 renda_aluguel += r.valor_anual
 
         if renda_aluguel == 0:
-            valor_total_imoveis = sum(i.situacao_atual for i in self.imoveis)
+            valor_total_imoveis = sum(i.situacao_atual for i in self.imoveis_edificados)
             self.warnings.append(
                 Warning(
                     mensagem=(
-                        f"Contribuinte possui {len(self.imoveis)} imóveis "
+                        f"Contribuinte possui {len(self.imoveis_edificados)} imóveis edificados "
                         f"(R$ {valor_total_imoveis:,.2f}) mas não declara renda de "
                         f"aluguel. Verifique se há imóveis alugados não declarados."
                     ),
