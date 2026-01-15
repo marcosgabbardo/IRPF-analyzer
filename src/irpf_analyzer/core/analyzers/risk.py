@@ -4,7 +4,9 @@ from decimal import Decimal
 from typing import Optional
 
 from irpf_analyzer.core.analyzers.consistency import ConsistencyAnalyzer
+from irpf_analyzer.core.analyzers.cross_validation import CrossValidationAnalyzer
 from irpf_analyzer.core.analyzers.deductions import DeductionAnalyzer
+from irpf_analyzer.core.analyzers.dependent_fraud import DependentFraudAnalyzer
 from irpf_analyzer.core.analyzers.income import IncomeAnalyzer
 from irpf_analyzer.core.analyzers.optimization import OptimizationAnalyzer
 from irpf_analyzer.core.analyzers.patterns import PatternAnalyzer
@@ -60,6 +62,8 @@ class RiskAnalyzer:
         self._run_deduction_analysis()
         self._run_income_analysis()
         self._run_pattern_analysis()
+        self._run_dependent_fraud_analysis()
+        self._run_cross_validation_analysis()
 
         # Generate optimization suggestions
         self._run_optimization_analysis()
@@ -101,6 +105,20 @@ class RiskAnalyzer:
     def _run_pattern_analysis(self) -> None:
         """Run pattern analysis for suspicious patterns."""
         analyzer = PatternAnalyzer(self.declaration)
+        inconsistencies, warnings = analyzer.analyze()
+        self.inconsistencies.extend(inconsistencies)
+        self.warnings.extend(warnings)
+
+    def _run_dependent_fraud_analysis(self) -> None:
+        """Run dependent fraud analysis."""
+        analyzer = DependentFraudAnalyzer(self.declaration)
+        inconsistencies, warnings = analyzer.analyze()
+        self.inconsistencies.extend(inconsistencies)
+        self.warnings.extend(warnings)
+
+    def _run_cross_validation_analysis(self) -> None:
+        """Run cross-validation analysis simulating Receita Federal crossings."""
+        analyzer = CrossValidationAnalyzer(self.declaration)
         inconsistencies, warnings = analyzer.analyze()
         self.inconsistencies.extend(inconsistencies)
         self.warnings.extend(warnings)
