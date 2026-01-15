@@ -80,6 +80,13 @@ class InconsistencyType(str, Enum):
     GANHO_CAPITAL_IMPLAUSIVEL = "ganho_capital_implausivel"
     PATRIMONIO_DIVIDA_INCONSISTENTE = "patrimonio_divida_inconsistente"
 
+    # Cryptocurrency patterns (IN RFB 1888/2019)
+    GANHO_CAPITAL_CRIPTO_ACIMA_LIMITE = "ganho_capital_cripto_acima_limite"
+    EXCHANGE_CNPJ_INVALIDO = "exchange_cnpj_invalido"
+    VARIACAO_CRIPTO_ATIPICA = "variacao_cripto_atipica"
+    CRIPTO_CONCENTRACAO_ALTA = "cripto_concentracao_alta"
+    CRIPTO_VALOR_REDONDO = "cripto_valor_redondo"
+
 
 class Inconsistency(BaseModel):
     """An inconsistency found in the declaration."""

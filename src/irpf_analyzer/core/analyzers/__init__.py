@@ -1,6 +1,10 @@
 """Analysis engines for IRPF declarations."""
 
 from irpf_analyzer.core.analyzers.consistency import ConsistencyAnalyzer
+from irpf_analyzer.core.analyzers.cryptocurrency import (
+    CryptocurrencyAnalyzer,
+    analyze_cryptocurrency,
+)
 from irpf_analyzer.core.analyzers.deductions import DeductionAnalyzer
 from irpf_analyzer.core.analyzers.optimization import (
     OptimizationAnalyzer,
@@ -16,12 +20,14 @@ from irpf_analyzer.core.analyzers.temporal import (
 
 __all__ = [
     "ConsistencyAnalyzer",
+    "CryptocurrencyAnalyzer",
     "DeductionAnalyzer",
     "OptimizationAnalyzer",
     "PatternAnalyzer",
     "RiskAnalyzer",
     "TemporalPatternAnalyzer",
     "TemporalPattern",
+    "analyze_cryptocurrency",
     "analyze_declaration",
     "analyze_optimization",
     "analyze_patterns",

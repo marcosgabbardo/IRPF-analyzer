@@ -220,6 +220,33 @@ RENDIMENTOS_ISENTOS_ALERTA = Decimal("0.60")  # 60%
 LIVRO_CAIXA_MAXIMO_RATIO = Decimal("0.80")  # 80% max
 
 
+# === Criptoativos (IN RFB 1888/2019) ===
+# Instrução Normativa que regulamenta a declaração de operações com criptoativos
+
+# Limite mensal de ganho de capital para obrigatoriedade de declaração mensal
+# Acima deste valor, contribuinte deve declarar operações mensalmente à RFB
+GANHO_CAPITAL_CRIPTO_MENSAL = Decimal("35000")
+
+# Limite de patrimônio em criptoativos para obrigatoriedade de declaração
+# Qualquer valor acima de R$ 5.000 deve ser declarado no IRPF
+PATRIMONIO_CRIPTO_OBRIGATORIO = Decimal("5000")
+
+# Variação máxima anual esperada para alertar sobre valorização atípica
+# Acima de 200% de valorização pode indicar necessidade de documentação adicional
+VARIACAO_CRIPTO_MAXIMA = Decimal("2.00")  # 200%
+
+# Variação mínima anual esperada para alertar sobre desvalorização atípica
+# Perda acima de 80% pode indicar problemas ou necessidade de revisão
+VARIACAO_CRIPTO_MINIMA = Decimal("-0.80")  # -80%
+
+# Limite de concentração em um único criptoativo
+# Acima de 80% em um único ativo gera alerta informativo
+CONCENTRACAO_CRIPTO_MAXIMA = Decimal("0.80")  # 80%
+
+# Limite mínimo para análise de variação (evitar divisão por zero e ruído)
+CRIPTO_VALOR_MINIMO_ANALISE = Decimal("1000")
+
+
 def calcular_imposto_anual(renda_tributavel: Decimal) -> Decimal:
     """Calculate annual tax for a given taxable income.
 

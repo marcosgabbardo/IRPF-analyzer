@@ -5,6 +5,7 @@ from typing import Optional
 
 from irpf_analyzer.core.analyzers.consistency import ConsistencyAnalyzer
 from irpf_analyzer.core.analyzers.cross_validation import CrossValidationAnalyzer
+from irpf_analyzer.core.analyzers.cryptocurrency import CryptocurrencyAnalyzer
 from irpf_analyzer.core.analyzers.deductions import DeductionAnalyzer
 from irpf_analyzer.core.analyzers.dependent_fraud import DependentFraudAnalyzer
 from irpf_analyzer.core.analyzers.income import IncomeAnalyzer
@@ -64,6 +65,7 @@ class RiskAnalyzer:
         self._run_pattern_analysis()
         self._run_dependent_fraud_analysis()
         self._run_cross_validation_analysis()
+        self._run_cryptocurrency_analysis()
 
         # Generate optimization suggestions
         self._run_optimization_analysis()
@@ -119,6 +121,13 @@ class RiskAnalyzer:
     def _run_cross_validation_analysis(self) -> None:
         """Run cross-validation analysis simulating Receita Federal crossings."""
         analyzer = CrossValidationAnalyzer(self.declaration)
+        inconsistencies, warnings = analyzer.analyze()
+        self.inconsistencies.extend(inconsistencies)
+        self.warnings.extend(warnings)
+
+    def _run_cryptocurrency_analysis(self) -> None:
+        """Run cryptocurrency analysis per IN RFB 1888/2019."""
+        analyzer = CryptocurrencyAnalyzer(self.declaration)
         inconsistencies, warnings = analyzer.analyze()
         self.inconsistencies.extend(inconsistencies)
         self.warnings.extend(warnings)
