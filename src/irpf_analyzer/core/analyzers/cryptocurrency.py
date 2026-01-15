@@ -61,7 +61,7 @@ class CryptocurrencyAnalyzer:
         "00000000000191": "Banco do Brasil Cripto",
     }
 
-    # Cryptocurrency sub-codes within group 08
+    # Cryptocurrency sub-codes within group 08 (per Receita Federal)
     CRYPTO_CODES: dict[str, str] = {
         "01": "Bitcoin (BTC)",
         "02": "Outras criptomoedas (altcoins)",
@@ -69,6 +69,24 @@ class CryptocurrencyAnalyzer:
         "10": "NFTs (Tokens Não-Fungíveis)",
         "99": "Outros criptoativos",
     }
+
+    # Keywords to detect crypto type from description
+    STABLECOIN_KEYWORDS: set[str] = {
+        "USDT", "USDC", "BUSD", "DAI", "TUSD", "USDP", "GUSD", "FRAX",
+        "STABLECOIN", "STABLE", "TETHER", "USD COIN", "BINANCE USD",
+    }
+
+    NFT_KEYWORDS: set[str] = {
+        "NFT", "TOKEN NÃO-FUNGÍVEL", "NON-FUNGIBLE", "OPENSEA", "RARIBLE",
+        "ARTE DIGITAL", "COLECIONÁVEL", "COLLECTIBLE", "BORED APE", "CRYPTOPUNK",
+    }
+
+    BITCOIN_KEYWORDS: set[str] = {
+        "BITCOIN", "BTC", "SATOSHI",
+    }
+
+    # Stablecoins should have minimal variation (pegged to USD)
+    STABLECOIN_VARIACAO_MAXIMA = Decimal("0.10")  # 10% max for stablecoins
 
     def __init__(self, declaration: Declaration) -> None:
         """Initialize analyzer with declaration data.

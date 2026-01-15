@@ -54,6 +54,18 @@ Uma ferramenta CLI em Python para analisar arquivos `.DEC` e `.DBK` (declaraçõ
   - Detecção de despesas médicas concentradas em poucos prestadores
   - Análise temporal multi-ano (renda estagnada vs patrimônio crescente)
 
+- **Detecção Avançada de Fraudes** 🆕
+  - **Smurfing (Fracionamento)**: Múltiplas operações próximas ao limite de R$ 30k para evitar declaração obrigatória (IN RFB 1888/2019)
+  - **Operações "Vai-e-Volta"**: Detecção de venda e recompra do mesmo ativo em curto período (wash sales)
+  - **Prestadores Fantasmas**: Deduções com CPF/CNPJ inválidos ou inexistentes
+  - **Timing Suspeito**: Análise de padrões de fluxo de caixa e movimentações em fim de ano
+
+- **Otimização de Investimentos** 🆕
+  - **Alocação Eficiente**: Sugere rebalanceamento de CDB/RDB para LCI/LCA (isentos de IR)
+  - **Fundos Imobiliários (FIIs)**: Identifica oportunidades de renda isenta via dividendos
+  - **Compensação de Prejuízos**: Detecta prejuízos acumulados que podem ser compensados com ganhos futuros
+  - **Análise de Concentração**: Alerta sobre alta concentração em um tipo de investimento
+
 - **Relatórios PDF Completos**
   - Exportação para PDF com todas as informações
   - Resumo financeiro e patrimonial
@@ -475,6 +487,42 @@ Se você tinha um CDB de R$ 100.000 que venceu e virou R$ 110.000 na conta:
    - **Despesas Concentradas**: Mais de 70% das despesas médicas em um único prestador
    - **Imóveis sem Aluguel**: Múltiplos imóveis sem renda de locação declarada
 
+6. **Detecção Avançada de Fraudes** 🆕
+   - **Smurfing (Fracionamento)**:
+     - Detecta múltiplas operações com valores entre R$ 25.500 e R$ 30.000 (15% abaixo do limite)
+     - Identifica padrão comum de evasão do limite de declaração obrigatória (IN RFB 1888/2019)
+     - Verifica alienações e aquisições de patrimônio
+   - **Operações "Vai-e-Volta" (Wash Sales)**:
+     - Identifica venda seguida de recompra do mesmo ativo
+     - Detecta manipulação do custo de aquisição
+     - Verifica realização artificial de prejuízo para compensação tributária
+   - **Prestadores Fantasmas**:
+     - Valida CPF/CNPJ de prestadores de serviços
+     - Detecta deduções sem identificação do prestador
+     - Identifica prestadores com múltiplos tipos de serviços (padrão atípico)
+   - **Timing Suspeito de Fluxo de Caixa**:
+     - Analisa compensação intencional de lucros e prejuízos
+     - Verifica aquisições de alto valor vs renda disponível
+     - Detecta variação patrimonial não explicada por rendimentos
+     - Identifica alta proporção de rendimentos classificados como bônus/extras
+
+7. **Otimização de Investimentos** 🆕
+   - **Alocação Eficiente de Renda Fixa**:
+     - Identifica CDB/RDB que poderiam ser convertidos em LCI/LCA
+     - Calcula economia potencial de IR (17.5% médio sobre rendimentos)
+     - Sugere diversificação quando > 60% da carteira está em ativos tributados
+   - **Fundos Imobiliários (FIIs)**:
+     - Sugere alocação em FIIs para quem não possui (dividendos isentos para PF)
+     - Detecta FIIs em carteira sem dividendos declarados (possível inconsistência)
+     - Estima economia potencial com base em yield médio de 8% a.a.
+   - **Compensação de Prejuízos**:
+     - Identifica prejuízos acumulados em alienações por tipo de ativo
+     - Detecta prejuízos em ações estrangeiras (campo lucro_prejuizo)
+     - Calcula economia potencial de 15% sobre prejuízos compensáveis
+   - **Concentração de Carteira**:
+     - Alerta quando > 80% do patrimônio está em um único tipo de investimento
+     - Classifica ativos: FII, Cripto, Renda Fixa Isenta, Renda Fixa Tributada
+
 ### Tipos de Ativos Reconhecidos
 
 - **Isentos de warning quando zerados:**
@@ -498,10 +546,13 @@ irpf-analyzer/
 │   │   └── console.py          # Configuração Rich
 │   ├── core/
 │   │   ├── analyzers/          # Analisadores de risco
+│   │   │   ├── advanced_patterns.py # Detecção avançada de fraudes
 │   │   │   ├── consistency.py  # Verificações de consistência
 │   │   │   ├── deductions.py   # Verificações de deduções
+│   │   │   ├── investment_optimization.py # Otimização de investimentos 🆕
 │   │   │   ├── optimization.py # Sugestões de otimização fiscal
 │   │   │   ├── comparison.py   # Comparativo ano-a-ano
+│   │   │   ├── patterns.py     # Análise de padrões estatísticos
 │   │   │   └── risk.py         # Cálculo de score
 │   │   ├── models/             # Modelos Pydantic
 │   │   │   ├── analysis.py     # RiskScore, Warning, Suggestion

@@ -87,6 +87,12 @@ class InconsistencyType(str, Enum):
     CRIPTO_CONCENTRACAO_ALTA = "cripto_concentracao_alta"
     CRIPTO_VALOR_REDONDO = "cripto_valor_redondo"
 
+    # Advanced fraud detection patterns (v2.2)
+    SMURFING_DETECTADO = "smurfing_detectado"
+    ROUND_TRIP_SUSPEITO = "round_trip_suspeito"
+    DEDUCAO_PRESTADOR_FANTASMA = "deducao_prestador_fantasma"
+    TIMING_FLUXO_CAIXA_SUSPEITO = "timing_fluxo_caixa_suspeito"
+
 
 class Inconsistency(BaseModel):
     """An inconsistency found in the declaration."""
