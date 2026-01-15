@@ -74,6 +74,37 @@ Uma ferramenta CLI em Python para analisar arquivos `.DEC` e `.DBK` (declaraçõ
   - **Concentração de Portfólio**: Identifica quando > 80% do patrimônio cripto está em um único ativo
   - **Self-Custody**: Alerta sobre criptoativos sem CNPJ de custodiante (carteiras próprias)
 
+- **Planejamento Sucessório** 🆕
+  - **Doação em Vida vs Herança**: Compara custo de ITCMD para doação vs inventário/herança
+  - **Alíquotas ITCMD por Estado**: Base completa de alíquotas de todos os 27 estados brasileiros
+  - **Holding Familiar**: Sugere estrutura de holding patrimonial para economia tributária
+  - **Doação Gradual**: Estratégia de doações dentro do limite de isenção estadual
+  - **Comparativo entre Estados**: Identifica estados com menor carga tributária
+
+- **Validações Cruzadas Específicas** 🆕
+  - **Despesas Médicas vs Idade**: Valida se despesas médicas são compatíveis com a faixa etária do contribuinte
+  - **Educação vs Idade Dependente**: Verifica se despesas educacionais correspondem às idades dos dependentes
+  - **Valorização de Imóveis**: Alerta para valorizações acima de 15% sem benfeitorias declaradas
+  - **Cruzamento entre Cônjuges**: Detecta dependentes duplicados e prestadores de saúde em comum
+
+- **Profissionais Autônomos** 🆕
+  - **Otimização de Livro-Caixa**: Analisa e sugere melhorias nas deduções do livro-caixa
+  - **Despesas Dedutíveis**: Identifica categorias de despesas potencialmente não declaradas
+  - **Comparativo de Regimes**: Compara Autônomo/PF vs Simples Nacional vs Lucro Presumido
+  - **Análise MEI**: Sugere formalização como MEI para renda até R$ 81k/ano
+
+- **Expatriados e Residentes Fiscais** 🆕
+  - **Imposto de Saída (Exit Tax)**: Calcula imposto sobre ganho de capital não realizado ao deixar o Brasil
+  - **Crédito de Imposto Pago no Exterior**: Calcula crédito máximo e detecta excesso
+  - **DCBE**: Alerta quando ativos estrangeiros excedem USD 1 milhão
+  - **Tratados de Bitributação**: Base de 35 países com tratados
+
+- **Alerta de Mudanças na Legislação** 🆕
+  - **Reforma IR 2026**: Detecta contribuintes que ficarão isentos (Lei 15.270/2025)
+  - **IRPFM**: Avisa sobre imposto mínimo para renda > R$ 600k
+  - **Obrigações de Criptoativos**: Monitora limites da IN RFB 1888/2019
+  - **Base de Mudanças**: 12+ mudanças legislativas monitoradas com classificação de impacto
+
 - **Relatórios PDF Completos**
   - Exportação para PDF com todas as informações
   - Resumo financeiro e patrimonial
@@ -549,6 +580,114 @@ Se você tinha um CDB de R$ 100.000 que venceu e virou R$ 110.000 na conta:
      - Detecta criptoativos sem CNPJ de exchange (carteiras próprias)
      - Recomenda documentação de chaves e carteiras
 
+9. **Planejamento Sucessório** 🆕
+   - **Doação em Vida vs Herança**:
+     - Compara custo de ITCMD para doação direta vs inventário
+     - Inclui custos estimados de inventário (~8% do patrimônio)
+     - Calcula economia potencial com transferência em vida
+   - **Alíquotas ITCMD por Estado**:
+     - Base completa com alíquotas de doação e herança para todos os 27 estados
+     - Identificação de estados com alíquota progressiva vs fixa
+     - Limites de isenção por estado
+   - **Holding Familiar**:
+     - Sugere para patrimônio > R$ 2M
+     - Calcula economia: ITCMD (desconto de ~25%), ITBI (3%), inventário evitado
+     - Lista benefícios: proteção patrimonial, diferimento de ganho de capital
+   - **Doação Gradual**:
+     - Estratégia para usar limite de isenção anual por herdeiro
+     - Calcula tempo necessário para transferir patrimônio isento
+   - **Comparativo entre Estados**:
+     - Lista estados com menor tributação
+     - Economia potencial com mudança de domicílio fiscal
+
+10. **Validações Cruzadas Específicas** 🆕
+    - **Despesas Médicas vs Faixa Etária**:
+      - Valida se despesas médicas são proporcionais à idade do contribuinte
+      - Faixas etárias com thresholds progressivos (18-30, 31-45, 46-60, 61-75, 76+)
+      - Alerta para jovens com despesas médicas críticas (>20% da renda para 18-30 anos)
+      - Threshold mais tolerante para idosos (até 50% aceitável para 61-75 anos)
+    - **Educação vs Idade do Dependente**:
+      - Verifica compatibilidade entre valor de despesa e idade do dependente
+      - Detecta despesas de nível universitário (>R$30k) para crianças (<16 anos)
+      - Valida se dependente com despesa educacional existe na declaração
+      - Alerta para despesas educacionais sem beneficiário identificado
+    - **Valorização de Imóveis**:
+      - Limite máximo de 15% de valorização anual sem benfeitorias
+      - Alerta para valorizações entre 8% e 15% (documentar benfeitorias)
+      - Inconsistência para valorizações >15% (possível aumento indevido de custo)
+      - Aplica apenas para imóveis >R$100k (exclui terrenos pequenos)
+    - **Cruzamento entre Cônjuges**:
+      - Detecta dependentes declarados por ambos os cônjuges simultaneamente
+      - Identifica prestadores de saúde em comum (risco de despesas duplicadas)
+      - Compara valores de imóveis compartilhados entre declarações
+      - Gera inconsistência DEPENDENTE_DUPLICADO para duplicidades
+
+11. **Expatriados e Residentes Fiscais** 🆕
+    - **Imposto de Saída (Exit Tax)**:
+      - Calcula imposto sobre ganho de capital não realizado ao deixar o Brasil
+      - Alíquotas progressivas: 15% (até R$ 5M), 17.5% (R$ 5-10M), 20% (R$ 10-30M), 22.5% (acima R$ 30M)
+      - Aplica-se a imóveis, participações societárias, ações, fundos e criptoativos
+      - Calcula custo fiscal vs valor de mercado por ativo
+    - **Crédito de Imposto Pago no Exterior**:
+      - Calcula crédito máximo permitido (limite: imposto brasileiro devido)
+      - Detecta imposto estrangeiro excedente não aproveitável
+      - Sugere otimizações quando há excesso de crédito
+    - **DCBE (Declaração de Capitais Brasileiros no Exterior)**:
+      - Alerta quando ativos estrangeiros excedem USD 1.000.000
+      - Detecta ativos no exterior por localização ou descrição
+      - Obrigação junto ao Banco Central do Brasil
+    - **Tratados de Bitributação**:
+      - Base de 35 países com tratados (Alemanha, EUA, França, etc.)
+      - Sugere verificar aplicabilidade do tratado por país
+      - Alerta para países sem tratado (risco de bitributação)
+
+12. **Alerta de Mudanças na Legislação** 🆕
+    - **Reforma IR 2026 (Lei 15.270/2025)**:
+      - Detecta contribuintes que ficarão isentos (renda até R$ 5.000/mês)
+      - Alerta sobre redução progressiva (R$ 5.000 a R$ 7.350/mês)
+      - Avisa sobre IRPFM (imposto mínimo para renda > R$ 600k)
+      - Calcula economia potencial com novas regras
+    - **Obrigações de Criptoativos (IN RFB 1888/2019)**:
+      - Alerta sobre obrigação de declaração mensal (ganhos > R$ 35k/mês)
+      - Verifica se criptoativos têm CNPJ de exchange identificado
+      - Monitora patrimônio cripto > R$ 5.000
+    - **Obrigações Internacionais**:
+      - Alerta sobre DCBE para ativos > USD 1 milhão
+      - Detecta ativos no exterior por localização e descrição
+      - Sugere monitoramento de limite para ativos próximos ao threshold
+    - **Obrigatoriedade de Declaração**:
+      - Verifica critérios de obrigatoriedade (renda, patrimônio, etc.)
+      - Alerta sobre novos limites atualizados para 2026
+    - **Base de Mudanças Legislativas**:
+      - 12+ mudanças legislativas monitoradas
+      - Categorias: reforma tributária, limites de dedução, cripto, internacional
+      - Impacto classificado: alto, médio, baixo, informativo
+
+13. **Profissionais Autônomos** 🆕
+    - **Otimização de Livro-Caixa**:
+      - Detecta quando livro-caixa não está sendo utilizado
+      - Alerta para razão muito baixa de despesas (<20% da renda autônoma)
+      - Avisa quando razão é muito alta (>80%, risco de auditoria)
+      - Calcula economia potencial baseada na alíquota marginal
+    - **Despesas Dedutíveis Não Aproveitadas**:
+      - 8 categorias de despesas dedutíveis analisadas
+      - Aluguel de consultório/escritório (10% típico)
+      - Material de trabalho (5% típico)
+      - Comunicação: telefone e internet (3% típico)
+      - Deslocamento profissional (5% típico)
+      - Serviços de terceiros: contador, secretária (8% típico)
+      - Atualização profissional: cursos, congressos (3% típico)
+      - Equipamentos e manutenção (4% típico)
+      - Despesas bancárias da atividade (1% típico)
+    - **Comparativo de Regimes Tributários**:
+      - Autônomo/PF: INSS (20%) + IRPF progressivo (até 27,5%)
+      - Simples Nacional (Anexo III): alíquotas de 6% a 33%
+      - Lucro Presumido: base 32% + IRPJ/CSLL/PIS/COFINS/ISS
+      - Sugere regime mais econômico com economia estimada
+    - **MEI**:
+      - Sugere formalização como MEI para renda até R$ 81k/ano
+      - Custo fixo: ~R$ 71,60/mês (DAS)
+
 ### Tipos de Ativos Reconhecidos
 
 - **Isentos de warning quando zerados:**
@@ -573,13 +712,18 @@ irpf-analyzer/
 │   ├── core/
 │   │   ├── analyzers/          # Analisadores de risco
 │   │   │   ├── advanced_patterns.py # Detecção avançada de fraudes
+│   │   │   ├── autonomous_professional.py # Profissionais autônomos 🆕
 │   │   │   ├── consistency.py  # Verificações de consistência
-│   │   │   ├── cryptocurrency.py # Análise de criptoativos (IN 1888/2019) 🆕
+│   │   │   ├── cryptocurrency.py # Análise de criptoativos (IN 1888/2019)
 │   │   │   ├── deductions.py   # Verificações de deduções
-│   │   │   ├── investment_optimization.py # Otimização de investimentos 🆕
+│   │   │   ├── estate_planning.py # Planejamento sucessório
+│   │   │   ├── expatriate.py     # Expatriados e residentes fiscais 🆕
+│   │   │   ├── investment_optimization.py # Otimização de investimentos
+│   │   │   ├── legislation_alerts.py # Alertas de mudanças na legislação 🆕
 │   │   │   ├── optimization.py # Sugestões de otimização fiscal
 │   │   │   ├── comparison.py   # Comparativo ano-a-ano
 │   │   │   ├── patterns.py     # Análise de padrões estatísticos
+│   │   │   ├── specific_cross_validations.py # Validações cruzadas específicas
 │   │   │   └── risk.py         # Cálculo de score
 │   │   ├── models/             # Modelos Pydantic
 │   │   │   ├── analysis.py     # RiskScore, Warning, Suggestion
