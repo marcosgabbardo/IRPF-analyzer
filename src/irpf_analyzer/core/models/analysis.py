@@ -69,6 +69,17 @@ class InconsistencyType(str, Enum):
     CRUZAMENTO_DOC_DIVERGENTE = "cruzamento_doc"
     CRUZAMENTO_EFINANCEIRA_DIVERGENTE = "cruzamento_efinanceira"
 
+    # Phase 3 detections (v2.1 - Advanced Statistical)
+    IRRF_RATIO_ANOMALO = "irrf_ratio_anomalo"
+    PREVIDENCIA_INCONSISTENTE = "previdencia_inconsistente"
+    PENSAO_PROPORCAO_ALTA = "pensao_proporcao_alta"
+    LIVRO_CAIXA_SEM_AUTONOMO = "livro_caixa_sem_autonomo"
+    RENDIMENTO_DUPLICADO = "rendimento_duplicado"
+    ZSCORE_OUTLIER = "zscore_outlier"
+    VALOR_DUPLICADO = "valor_duplicado"
+    GANHO_CAPITAL_IMPLAUSIVEL = "ganho_capital_implausivel"
+    PATRIMONIO_DIVIDA_INCONSISTENTE = "patrimonio_divida_inconsistente"
+
 
 class Inconsistency(BaseModel):
     """An inconsistency found in the declaration."""

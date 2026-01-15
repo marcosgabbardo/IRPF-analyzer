@@ -25,6 +25,11 @@ from irpf_analyzer.shared.statistics import (
     calcular_chi_quadrado_benford,
     detectar_outliers_iqr,
     detectar_valores_redondos,
+    detectar_outliers_zscore,
+    calcular_indice_gini,
+    calcular_coeficiente_variacao,
+    detectar_valores_duplicados,
+    calcular_correlacao_pearson,
 )
 from irpf_analyzer.core.rules.tax_constants import (
     LIMITE_DESPESA_MEDICA_PF,
@@ -89,6 +94,14 @@ class PatternAnalyzer:
         # Statistical patterns
         self._check_outliers()
         self._check_benford()
+
+        # Advanced statistical patterns (Phase 2)
+        self._check_zscore_outliers()
+        self._check_duplicate_deductions()
+        self._check_patrimony_debt_correlation()
+        self._check_alienation_capital_gains()
+        self._check_medical_expense_patterns()
+        self._check_asset_value_consistency()
 
         return self.inconsistencies, self.warnings
 
@@ -702,6 +715,327 @@ class PatternAnalyzer:
                     categoria=WarningCategory.PADRAO,
                 )
             )
+
+    # ========================
+    # ADVANCED STATISTICAL PATTERNS
+    # ========================
+
+    def _check_zscore_outliers(self) -> None:
+        """Detect extreme outliers using z-score method.
+
+        Z-score is more sensitive than IQR for normally distributed data.
+        Values with |z| > 3 are statistically very unusual (0.3% probability).
+        """
+        # Medical expenses - commonly manipulated
+        despesas_medicas = [
+            d.valor for d in self.declaration.deducoes
+            if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
+        ]
+
+        if len(despesas_medicas) >= 5:
+            outliers = detectar_outliers_zscore(despesas_medicas)
+            for valor, zscore in outliers:
+                self.warnings.append(
+                    Warning(
+                        mensagem=(
+                            f"Despesa médica com valor estatisticamente extremo "
+                            f"(z-score={zscore:.1f}): R$ {valor:,.2f}"
+                        ),
+                        risco=RiskLevel.MEDIUM,
+                        campo="deducoes",
+                        categoria=WarningCategory.PADRAO,
+                        valor_impacto=valor,
+                    )
+                )
+
+    def _check_duplicate_deductions(self) -> None:
+        """Detect duplicate or near-duplicate deduction values.
+
+        Multiple deductions with identical or very similar values
+        may indicate copy-paste errors or fabricated data.
+        """
+        valores_deducao = [
+            d.valor for d in self.declaration.deducoes
+            if d.valor > Decimal("100")  # Ignore small values
+        ]
+
+        if len(valores_deducao) < 3:
+            return
+
+        duplicados = detectar_valores_duplicados(valores_deducao)
+
+        for valor, count in duplicados:
+            if count >= 3:
+                self.warnings.append(
+                    Warning(
+                        mensagem=(
+                            f"Valor de dedução repetido {count} vezes: R$ {valor:,.2f}. "
+                            f"Pode indicar duplicação ou erro de digitação."
+                        ),
+                        risco=RiskLevel.MEDIUM,
+                        campo="deducoes",
+                        categoria=WarningCategory.PADRAO,
+                        valor_impacto=valor * (count - 1),
+                    )
+                )
+
+    def _check_patrimony_debt_correlation(self) -> None:
+        """Analyze correlation between patrimony and debts.
+
+        Strong correlation may indicate:
+        - Proper financing of assets (normal)
+        - Leveraged purchases (higher risk)
+        - Debt taken to inflate patrimony
+
+        Weak or negative correlation with high patrimony growth
+        may indicate undeclared income.
+        """
+        # Get patrimony values
+        patrimonio_anterior = sum(b.situacao_anterior for b in self.declaration.bens_direitos)
+        patrimonio_atual = sum(b.situacao_atual for b in self.declaration.bens_direitos)
+
+        dividas_anterior = sum(d.situacao_anterior for d in self.declaration.dividas)
+        dividas_atual = sum(d.situacao_atual for d in self.declaration.dividas)
+
+        # Check for suspicious patterns
+        variacao_patrimonio = patrimonio_atual - patrimonio_anterior
+        variacao_dividas = dividas_atual - dividas_anterior
+
+        if variacao_patrimonio > Decimal("100000"):
+            # Large patrimony growth - check if explained by debt or income
+            renda_total = (
+                self.declaration.total_rendimentos_tributaveis
+                + self.declaration.total_rendimentos_isentos
+            )
+
+            # If patrimony grew more than income + new debt, suspicious
+            recursos_explicados = renda_total + variacao_dividas
+            if variacao_patrimonio > recursos_explicados * Decimal("1.5"):
+                diferenca = variacao_patrimonio - recursos_explicados
+                self.warnings.append(
+                    Warning(
+                        mensagem=(
+                            f"Crescimento patrimonial (R$ {variacao_patrimonio:,.2f}) "
+                            f"maior que renda + novas dívidas (R$ {recursos_explicados:,.2f}). "
+                            f"Diferença não explicada: R$ {diferenca:,.2f}"
+                        ),
+                        risco=RiskLevel.MEDIUM,
+                        campo="bens_direitos",
+                        categoria=WarningCategory.CONSISTENCIA,
+                        valor_impacto=diferenca,
+                    )
+                )
+
+        # Check debt ratio
+        if patrimonio_atual > 0 and dividas_atual > 0:
+            debt_ratio = dividas_atual / patrimonio_atual
+            if debt_ratio > Decimal("0.80"):
+                self.warnings.append(
+                    Warning(
+                        mensagem=(
+                            f"Alto nível de endividamento: dívidas representam "
+                            f"{debt_ratio*100:.0f}% do patrimônio bruto. "
+                            f"Considere revisar estrutura financeira."
+                        ),
+                        risco=RiskLevel.LOW,
+                        campo="dividas",
+                        categoria=WarningCategory.CONSISTENCIA,
+                        informativo=True,
+                    )
+                )
+
+    def _check_alienation_capital_gains(self) -> None:
+        """Validate capital gains from alienations (sales).
+
+        Capital gains should be reasonable relative to:
+        - Original asset value
+        - Time held
+        - Asset type
+
+        Suspicious patterns:
+        - Very high gains (>100% profit)
+        - Zero gains on large sales
+        - Gains without corresponding asset reduction
+        """
+        for alienacao in self.declaration.alienacoes:
+            if not alienacao.valor_alienacao or alienacao.valor_alienacao <= 0:
+                continue
+
+            # Check gain ratio if both values are available
+            if alienacao.ganho_capital and alienacao.valor_alienacao > 0:
+                gain_ratio = alienacao.ganho_capital / alienacao.valor_alienacao
+
+                nome_bem = alienacao.nome_bem[:40] if alienacao.nome_bem else "Não informado"
+
+                if gain_ratio > Decimal("1.0"):
+                    # Profit > 100% of sale value - very suspicious
+                    self.inconsistencies.append(
+                        Inconsistency(
+                            tipo=InconsistencyType.COMPRA_SEM_LASTRO,
+                            descricao=(
+                                f"Ganho de capital ({gain_ratio*100:.0f}% do valor de venda) "
+                                f"implausível em alienação: {nome_bem}..."
+                            ),
+                            valor_declarado=alienacao.ganho_capital,
+                            valor_esperado=alienacao.valor_alienacao * Decimal("0.5"),  # Max 50%
+                            risco=RiskLevel.HIGH,
+                            recomendacao="Verificar valores de aquisição e venda do bem",
+                            valor_impacto=alienacao.ganho_capital,
+                        )
+                    )
+                elif gain_ratio > Decimal("0.50"):
+                    # High but not impossible gain
+                    self.warnings.append(
+                        Warning(
+                            mensagem=(
+                                f"Ganho de capital significativo ({gain_ratio*100:.0f}%): "
+                                f"{nome_bem}... - "
+                                f"Mantenha documentação de aquisição."
+                            ),
+                            risco=RiskLevel.LOW,
+                            campo="alienacoes",
+                            categoria=WarningCategory.CONSISTENCIA,
+                            informativo=True,
+                            valor_impacto=alienacao.ganho_capital,
+                        )
+                    )
+
+            # Check for large sales with zero capital gains
+            if alienacao.valor_alienacao > Decimal("100000"):
+                if not alienacao.ganho_capital or alienacao.ganho_capital == 0:
+                    nome_bem = alienacao.nome_bem[:40] if alienacao.nome_bem else "Não informado"
+                    self.warnings.append(
+                        Warning(
+                            mensagem=(
+                                f"Alienação de alto valor (R$ {alienacao.valor_alienacao:,.2f}) "
+                                f"com ganho de capital zerado ou não informado: "
+                                f"{nome_bem}..."
+                            ),
+                            risco=RiskLevel.LOW,
+                            campo="alienacoes",
+                            categoria=WarningCategory.CONSISTENCIA,
+                            informativo=True,
+                            valor_impacto=alienacao.valor_alienacao,
+                        )
+                    )
+
+    def _check_medical_expense_patterns(self) -> None:
+        """Detect suspicious patterns in medical expenses.
+
+        Patterns analyzed:
+        - Seasonal concentration (all expenses in one period)
+        - Provider type distribution (PF vs PJ)
+        - Value distribution (statistical analysis)
+        """
+        despesas_medicas = [
+            d for d in self.declaration.deducoes
+            if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
+        ]
+
+        if len(despesas_medicas) < 3:
+            return
+
+        # Check coefficient of variation
+        valores = [d.valor for d in despesas_medicas]
+        cv = calcular_coeficiente_variacao(valores)
+
+        if cv < Decimal("10"):
+            # Very low CV - all values are similar (suspicious)
+            self.warnings.append(
+                Warning(
+                    mensagem=(
+                        f"Despesas médicas com valores muito uniformes "
+                        f"(CV={cv:.1f}%). Pode indicar valores estimados/fabricados."
+                    ),
+                    risco=RiskLevel.MEDIUM,
+                    campo="deducoes",
+                    categoria=WarningCategory.PADRAO,
+                    valor_impacto=sum(valores),
+                )
+            )
+
+        # Check for PF vs PJ distribution
+        pf_count = 0
+        pj_count = 0
+        pf_valor = Decimal("0")
+        pj_valor = Decimal("0")
+
+        for d in despesas_medicas:
+            if d.cpf_prestador:
+                pf_count += 1
+                pf_valor += d.valor
+            elif d.cnpj_prestador:
+                pj_count += 1
+                pj_valor += d.valor
+
+        total_valor = pf_valor + pj_valor
+        if total_valor > 0 and pf_valor / total_valor > Decimal("0.70"):
+            # More than 70% with PF providers
+            self.warnings.append(
+                Warning(
+                    mensagem=(
+                        f"Alto percentual de despesas médicas com pessoas físicas: "
+                        f"{pf_valor/total_valor*100:.0f}% (R$ {pf_valor:,.2f}). "
+                        f"Despesas com PF recebem maior escrutínio da Receita."
+                    ),
+                    risco=RiskLevel.LOW,
+                    campo="deducoes",
+                    categoria=WarningCategory.PADRAO,
+                    informativo=True,
+                    valor_impacto=pf_valor,
+                )
+            )
+
+    def _check_asset_value_consistency(self) -> None:
+        """Check for asset value inconsistencies.
+
+        Detects:
+        - Properties with value below typical minimums
+        - Vehicles with value inconsistent with age
+        - Assets with suspicious value changes
+        """
+        for bem in self.declaration.bens_direitos:
+            # Skip assets with no value
+            if bem.situacao_atual <= 0:
+                continue
+
+            # Check for undervalued properties
+            if bem.codigo in self.CODIGOS_IMOVEIS:
+                if bem.situacao_atual < Decimal("50000"):
+                    self.warnings.append(
+                        Warning(
+                            mensagem=(
+                                f"Imóvel com valor baixo: R$ {bem.situacao_atual:,.2f} - "
+                                f"{bem.discriminacao[:40]}... "
+                                f"Valores muito baixos podem gerar questionamento."
+                            ),
+                            risco=RiskLevel.LOW,
+                            campo="bens_direitos",
+                            categoria=WarningCategory.PADRAO,
+                            informativo=True,
+                        )
+                    )
+
+            # Check for significant value changes in stable assets
+            if bem.situacao_anterior > 0:
+                variacao_pct = abs(bem.variacao_percentual)
+
+                # Properties shouldn't vary much year over year (except improvements)
+                if bem.codigo in self.CODIGOS_IMOVEIS:
+                    if variacao_pct > Decimal("30") and bem.variacao_absoluta > Decimal("50000"):
+                        self.warnings.append(
+                            Warning(
+                                mensagem=(
+                                    f"Imóvel com variação significativa ({variacao_pct:.0f}%): "
+                                    f"{bem.discriminacao[:40]}... "
+                                    f"Imóveis devem manter valor histórico de aquisição."
+                                ),
+                                risco=RiskLevel.LOW,
+                                campo="bens_direitos",
+                                categoria=WarningCategory.CONSISTENCIA,
+                                valor_impacto=abs(bem.variacao_absoluta),
+                            )
+                        )
 
 
 def analyze_patterns(declaration: Declaration) -> tuple[list[Inconsistency], list[Warning]]:

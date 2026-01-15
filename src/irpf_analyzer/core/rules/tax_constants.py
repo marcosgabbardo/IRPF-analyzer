@@ -117,6 +117,63 @@ RENDA_MAXIMA_VALIDA = Decimal("10000000")
 # Minimum income to consider (to skip irrelevant declarations)
 RENDA_MINIMA_VALIDA = Decimal("0")
 
+# === INSS (Previdência Social) Limits 2024 ===
+
+# INSS contribution rates by bracket (2024)
+# Progressive rates: 7.5%, 9%, 12%, 14%
+INSS_FAIXA_1 = Decimal("1412.00")  # Up to this: 7.5%
+INSS_FAIXA_2 = Decimal("2666.68")  # Up to this: 9%
+INSS_FAIXA_3 = Decimal("4000.03")  # Up to this: 12%
+INSS_FAIXA_4 = Decimal("7786.02")  # Up to this (ceiling): 14%
+
+INSS_ALIQUOTA_1 = Decimal("0.075")
+INSS_ALIQUOTA_2 = Decimal("0.09")
+INSS_ALIQUOTA_3 = Decimal("0.12")
+INSS_ALIQUOTA_4 = Decimal("0.14")
+
+# Maximum annual INSS contribution (ceiling * 12 months * max rate)
+TETO_INSS_MENSAL = INSS_FAIXA_4
+TETO_INSS_ANUAL = TETO_INSS_MENSAL * 12
+
+# === Alimony (Pensão Alimentícia) Limits ===
+
+# Typical alimony as percentage of income (judicial guidelines)
+PENSAO_MINIMA_PERCENTUAL = Decimal("0.10")  # 10% minimum
+PENSAO_MAXIMA_PERCENTUAL = Decimal("0.40")  # 40% maximum typical
+PENSAO_LIMITE_ABSOLUTO = Decimal("0.50")  # 50% absolute maximum
+
+# === Statistical Detection Thresholds ===
+
+# Z-score threshold for extreme outliers
+ZSCORE_LIMITE_OUTLIER = Decimal("3.0")  # 99.7% of data
+
+# Coefficient of variation threshold for suspicious uniformity
+CV_MINIMO_ESPERADO = Decimal("10")  # Below this = too uniform
+
+# Gini coefficient threshold for concentration
+GINI_CONCENTRACAO_ALTA = Decimal("0.85")  # Above this = highly concentrated
+
+# Benford's Law chi-squared critical value (df=8, α=0.05)
+BENFORD_CHI2_CRITICO = Decimal("15.51")
+
+# === Income Analysis Thresholds ===
+
+# IRRF ratio tolerances by income bracket (min_income, max_ratio)
+IRRF_TOLERANCIA_SUPERIOR = Decimal("0.05")  # 5% above expected
+IRRF_TOLERANCIA_INFERIOR = Decimal("0.02")  # 2% below expected
+
+# 13th salary expected ratio (1/12 = 8.33%)
+DECIMO_TERCEIRO_RATIO_ESPERADO = Decimal("0.0833")
+DECIMO_TERCEIRO_TOLERANCIA = Decimal("0.20")  # 20% tolerance
+
+# Exempt income ratio threshold (above this = needs documentation)
+RENDIMENTOS_ISENTOS_ALERTA = Decimal("0.60")  # 60%
+
+# === Livro-Caixa (Cash Book) Limits ===
+
+# Maximum livro-caixa as percentage of autonomous income
+LIVRO_CAIXA_MAXIMO_RATIO = Decimal("0.80")  # 80% max
+
 
 def calcular_imposto_anual(renda_tributavel: Decimal) -> Decimal:
     """Calculate annual tax for a given taxable income.

@@ -8,6 +8,17 @@ from irpf_analyzer.shared.statistics import (
     calcular_chi_quadrado_benford,
     calcular_distribuicao_benford,
     calcular_estatisticas_basicas,
+    calcular_desvio_padrao,
+    calcular_zscore,
+    detectar_outliers_zscore,
+    calcular_coeficiente_variacao,
+    calcular_indice_gini,
+    calcular_entropia,
+    detectar_valores_duplicados,
+    calcular_taxa_variacao,
+    calcular_percentil,
+    detectar_sequencia_linear,
+    calcular_correlacao_pearson,
     detectar_outliers_iqr,
     detectar_valores_redondos,
     extrair_primeiro_digito,
@@ -272,3 +283,257 @@ class TestCalcularEstatisticasBasicas:
         assert stats["mediana"] == Decimal("0")
         assert stats["min"] == Decimal("0")
         assert stats["max"] == Decimal("0")
+
+
+class TestCalcularDesvioPadrao:
+    """Tests for calcular_desvio_padrao function."""
+
+    def test_uniform_values(self):
+        """Uniform values should have zero std deviation."""
+        valores = [Decimal("100"), Decimal("100"), Decimal("100")]
+        assert calcular_desvio_padrao(valores) == Decimal("0")
+
+    def test_simple_std(self):
+        """Calculate std deviation for simple values."""
+        valores = [Decimal("2"), Decimal("4"), Decimal("4"), Decimal("4"), Decimal("5"), Decimal("5"), Decimal("7"), Decimal("9")]
+        std = calcular_desvio_padrao(valores)
+        # Expected std ~= 2.14
+        assert Decimal("2.0") < std < Decimal("2.3")
+
+    def test_insufficient_data(self):
+        """Less than 2 values should return 0."""
+        assert calcular_desvio_padrao([Decimal("100")]) == Decimal("0")
+        assert calcular_desvio_padrao([]) == Decimal("0")
+
+
+class TestCalcularZscore:
+    """Tests for calcular_zscore function."""
+
+    def test_at_mean(self):
+        """Value at mean should have z-score of 0."""
+        z = calcular_zscore(Decimal("100"), Decimal("100"), Decimal("10"))
+        assert z == Decimal("0")
+
+    def test_one_std_above(self):
+        """Value one std above mean should have z-score of 1."""
+        z = calcular_zscore(Decimal("110"), Decimal("100"), Decimal("10"))
+        assert z == Decimal("1")
+
+    def test_two_std_below(self):
+        """Value two std below mean should have z-score of -2."""
+        z = calcular_zscore(Decimal("80"), Decimal("100"), Decimal("10"))
+        assert z == Decimal("-2")
+
+    def test_zero_std(self):
+        """Zero std deviation should return 0."""
+        z = calcular_zscore(Decimal("150"), Decimal("100"), Decimal("0"))
+        assert z == Decimal("0")
+
+
+class TestDetectarOutliersZscore:
+    """Tests for detectar_outliers_zscore function."""
+
+    def test_no_outliers(self):
+        """Normal data should have no z-score outliers."""
+        valores = [Decimal("100"), Decimal("102"), Decimal("98"), Decimal("101"), Decimal("99")]
+        outliers = detectar_outliers_zscore(valores)
+        assert outliers == []
+
+    def test_detect_extreme_outlier(self):
+        """Detect extreme outlier with z > 3."""
+        # Need more data points with tighter distribution for z-score to detect outlier
+        valores = [
+            Decimal("100"), Decimal("102"), Decimal("98"), Decimal("101"), Decimal("99"),
+            Decimal("100"), Decimal("101"), Decimal("99"), Decimal("100"), Decimal("102"),
+            Decimal("1000"),  # Extreme outlier
+        ]
+        outliers = detectar_outliers_zscore(valores)
+        assert len(outliers) >= 1
+        # The outlier value 1000 should be detected
+        outlier_values = [o[0] for o in outliers]
+        assert Decimal("1000") in outlier_values
+
+    def test_insufficient_data(self):
+        """Less than 3 values should return empty list."""
+        valores = [Decimal("100"), Decimal("200")]
+        assert detectar_outliers_zscore(valores) == []
+
+
+class TestCalcularCoeficienteVariacao:
+    """Tests for calcular_coeficiente_variacao function."""
+
+    def test_low_cv(self):
+        """Uniform data should have low CV."""
+        valores = [Decimal("100"), Decimal("101"), Decimal("99"), Decimal("100")]
+        cv = calcular_coeficiente_variacao(valores)
+        assert cv < Decimal("5")  # Less than 5%
+
+    def test_high_cv(self):
+        """Varied data should have high CV."""
+        valores = [Decimal("100"), Decimal("500"), Decimal("50"), Decimal("1000")]
+        cv = calcular_coeficiente_variacao(valores)
+        assert cv > Decimal("50")  # More than 50%
+
+    def test_insufficient_data(self):
+        """Less than 2 values should return 0."""
+        assert calcular_coeficiente_variacao([Decimal("100")]) == Decimal("0")
+
+
+class TestCalcularIndiceGini:
+    """Tests for calcular_indice_gini function."""
+
+    def test_perfect_equality(self):
+        """Equal values should have Gini close to 0."""
+        valores = [Decimal("100"), Decimal("100"), Decimal("100"), Decimal("100")]
+        gini = calcular_indice_gini(valores)
+        assert gini < Decimal("0.1")
+
+    def test_high_concentration(self):
+        """One dominant value should have high Gini."""
+        valores = [Decimal("1"), Decimal("1"), Decimal("1"), Decimal("1000")]
+        gini = calcular_indice_gini(valores)
+        assert gini > Decimal("0.7")
+
+    def test_empty_list(self):
+        """Empty list should return 0."""
+        assert calcular_indice_gini([]) == Decimal("0")
+
+
+class TestCalcularEntropia:
+    """Tests for calcular_entropia function."""
+
+    def test_uniform_distribution(self):
+        """Uniform distribution should have high entropy (close to 1)."""
+        valores = [Decimal("100"), Decimal("100"), Decimal("100"), Decimal("100")]
+        entropia = calcular_entropia(valores)
+        assert entropia > Decimal("0.9")
+
+    def test_concentrated_distribution(self):
+        """Concentrated distribution should have low entropy."""
+        valores = [Decimal("1000"), Decimal("1"), Decimal("1"), Decimal("1")]
+        entropia = calcular_entropia(valores)
+        assert entropia < Decimal("0.5")
+
+    def test_empty_list(self):
+        """Empty list should return 0."""
+        assert calcular_entropia([]) == Decimal("0")
+
+
+class TestDetectarValoresDuplicados:
+    """Tests for detectar_valores_duplicados function."""
+
+    def test_detect_duplicates(self):
+        """Detect duplicate values."""
+        valores = [Decimal("100"), Decimal("100"), Decimal("200"), Decimal("100")]
+        duplicados = detectar_valores_duplicados(valores)
+        assert len(duplicados) == 1
+        assert duplicados[0][0] == Decimal("100")
+        assert duplicados[0][1] == 3
+
+    def test_no_duplicates(self):
+        """No duplicates should return empty list."""
+        valores = [Decimal("100"), Decimal("200"), Decimal("300")]
+        duplicados = detectar_valores_duplicados(valores)
+        assert duplicados == []
+
+    def test_near_duplicates(self):
+        """Detect near-duplicates within tolerance."""
+        valores = [Decimal("100"), Decimal("100.5"), Decimal("200")]
+        duplicados = detectar_valores_duplicados(valores, tolerancia=Decimal("0.01"))
+        assert len(duplicados) == 1  # 100 and 100.5 are within 1%
+
+
+class TestCalcularTaxaVariacao:
+    """Tests for calcular_taxa_variacao function."""
+
+    def test_positive_growth(self):
+        """Positive growth should return positive percentage."""
+        taxa = calcular_taxa_variacao(Decimal("100"), Decimal("150"))
+        assert taxa == Decimal("50")
+
+    def test_negative_growth(self):
+        """Negative growth should return negative percentage."""
+        taxa = calcular_taxa_variacao(Decimal("100"), Decimal("80"))
+        assert taxa == Decimal("-20")
+
+    def test_from_zero(self):
+        """Growth from zero should return 100%."""
+        taxa = calcular_taxa_variacao(Decimal("0"), Decimal("100"))
+        assert taxa == Decimal("100")
+
+    def test_no_change(self):
+        """No change should return 0%."""
+        taxa = calcular_taxa_variacao(Decimal("100"), Decimal("100"))
+        assert taxa == Decimal("0")
+
+
+class TestCalcularPercentil:
+    """Tests for calcular_percentil function."""
+
+    def test_median(self):
+        """50th percentile should be the median."""
+        valores = [Decimal("10"), Decimal("20"), Decimal("30"), Decimal("40"), Decimal("50")]
+        p50 = calcular_percentil(valores, 50)
+        assert p50 == Decimal("30")
+
+    def test_quartiles(self):
+        """Test quartiles."""
+        valores = [Decimal("1"), Decimal("2"), Decimal("3"), Decimal("4"), Decimal("5")]
+        p25 = calcular_percentil(valores, 25)
+        p75 = calcular_percentil(valores, 75)
+        assert Decimal("1") <= p25 <= Decimal("2")
+        assert Decimal("4") <= p75 <= Decimal("5")
+
+    def test_empty_list(self):
+        """Empty list should return 0."""
+        assert calcular_percentil([], 50) == Decimal("0")
+
+
+class TestDetectarSequenciaLinear:
+    """Tests for detectar_sequencia_linear function."""
+
+    def test_linear_sequence(self):
+        """Perfect linear sequence should be detected."""
+        valores = [Decimal("100"), Decimal("200"), Decimal("300"), Decimal("400"), Decimal("500")]
+        assert detectar_sequencia_linear(valores) is True
+
+    def test_non_linear(self):
+        """Non-linear data should not be detected."""
+        valores = [Decimal("100"), Decimal("300"), Decimal("150"), Decimal("500"), Decimal("200")]
+        assert detectar_sequencia_linear(valores) is False
+
+    def test_insufficient_data(self):
+        """Less than 4 values should return False."""
+        valores = [Decimal("100"), Decimal("200"), Decimal("300")]
+        assert detectar_sequencia_linear(valores) is False
+
+
+class TestCalcularCorrelacaoPearson:
+    """Tests for calcular_correlacao_pearson function."""
+
+    def test_perfect_positive(self):
+        """Perfect positive correlation should be 1."""
+        x = [Decimal("1"), Decimal("2"), Decimal("3"), Decimal("4")]
+        y = [Decimal("10"), Decimal("20"), Decimal("30"), Decimal("40")]
+        corr = calcular_correlacao_pearson(x, y)
+        assert corr > Decimal("0.99")
+
+    def test_perfect_negative(self):
+        """Perfect negative correlation should be -1."""
+        x = [Decimal("1"), Decimal("2"), Decimal("3"), Decimal("4")]
+        y = [Decimal("40"), Decimal("30"), Decimal("20"), Decimal("10")]
+        corr = calcular_correlacao_pearson(x, y)
+        assert corr < Decimal("-0.99")
+
+    def test_no_correlation(self):
+        """No correlation should be close to 0."""
+        x = [Decimal("1"), Decimal("2"), Decimal("3"), Decimal("4")]
+        y = [Decimal("5"), Decimal("1"), Decimal("8"), Decimal("2")]
+        corr = calcular_correlacao_pearson(x, y)
+        assert Decimal("-0.5") < corr < Decimal("0.5")
+
+    def test_mismatched_lengths(self):
+        """Mismatched lengths should return 0."""
+        x = [Decimal("1"), Decimal("2")]
+        y = [Decimal("1"), Decimal("2"), Decimal("3")]
+        assert calcular_correlacao_pearson(x, y) == Decimal("0")
