@@ -73,28 +73,14 @@ class DependentFraudAnalyzer:
         """Check for suspicious CPF patterns in dependents.
 
         Patterns detected:
+        - Missing/empty CPF
         - All digits same (111.111.111-11)
         - Sequential digits
         - Invalid check digits
         - CPFs that don't match birth date (future detection)
         """
         for dep in self.declaration.dependentes:
-            if not dep.cpf:
-                self.warnings.append(
-                    Warning(
-                        mensagem=(
-                            f"Dependente {dep.nome} sem CPF informado. "
-                            f"CPF é obrigatório para todos os dependentes."
-                        ),
-                        risco=RiskLevel.HIGH,
-                        campo="dependentes",
-                        categoria=WarningCategory.CONSISTENCIA,
-                        valor_impacto=DEDUCAO_DEPENDENTE,
-                    )
-                )
-                continue
-
-            # Validate CPF
+            # Validate CPF (handles empty/missing as invalid)
             valido, motivo = validar_cpf(dep.cpf)
             if not valido:
                 self.inconsistencies.append(
