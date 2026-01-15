@@ -66,6 +66,14 @@ Uma ferramenta CLI em Python para analisar arquivos `.DEC` e `.DBK` (declaraçõ
   - **Compensação de Prejuízos**: Detecta prejuízos acumulados que podem ser compensados com ganhos futuros
   - **Análise de Concentração**: Alerta sobre alta concentração em um tipo de investimento
 
+- **Análise de Criptoativos (IN RFB 1888/2019)** 🆕
+  - **Ganho de Capital**: Detecta quando ganhos mensais estimados excedem R$ 35k (obrigação de declaração mensal)
+  - **Validação de Exchanges**: Valida CNPJs de corretoras (lista de exchanges conhecidas: Mercado Bitcoin, Binance, etc.)
+  - **Valores Redondos**: Detecta valores suspeitos (preços de mercado raramente são redondos)
+  - **Variações Atípicas**: Alerta para valorizações > 200% ou desvalorizações > 80%
+  - **Concentração de Portfólio**: Identifica quando > 80% do patrimônio cripto está em um único ativo
+  - **Self-Custody**: Alerta sobre criptoativos sem CNPJ de custodiante (carteiras próprias)
+
 - **Relatórios PDF Completos**
   - Exportação para PDF com todas as informações
   - Resumo financeiro e patrimonial
@@ -523,6 +531,24 @@ Se você tinha um CDB de R$ 100.000 que venceu e virou R$ 110.000 na conta:
      - Alerta quando > 80% do patrimônio está em um único tipo de investimento
      - Classifica ativos: FII, Cripto, Renda Fixa Isenta, Renda Fixa Tributada
 
+8. **Análise de Criptoativos (IN RFB 1888/2019)** 🆕
+   - **Limite de Ganho de Capital**:
+     - Detecta quando ganho mensal estimado excede R$ 35.000 (obrigação de declaração mensal)
+     - Alerta sobre obrigação de declarar holdings > R$ 5.000 conforme IN 1888/2019
+   - **Validação de Exchanges**:
+     - Valida CNPJ de corretoras/custodiantes usando módulo 11
+     - Lista de exchanges conhecidas: Mercado Bitcoin, Binance, Foxbit, NovaDAX, etc.
+     - Alerta para CNPJs válidos mas não reconhecidos
+   - **Detecção de Padrões Suspeitos**:
+     - Valores redondos (preços de mercado raramente são múltiplos de R$ 1.000)
+     - Valorizações atípicas > 200% (requer documentação)
+     - Desvalorizações atípicas > 80% (possível venda não declarada)
+   - **Concentração de Portfólio Cripto**:
+     - Alerta quando > 80% do patrimônio cripto está em um único ativo
+   - **Self-Custody**:
+     - Detecta criptoativos sem CNPJ de exchange (carteiras próprias)
+     - Recomenda documentação de chaves e carteiras
+
 ### Tipos de Ativos Reconhecidos
 
 - **Isentos de warning quando zerados:**
@@ -548,6 +574,7 @@ irpf-analyzer/
 │   │   ├── analyzers/          # Analisadores de risco
 │   │   │   ├── advanced_patterns.py # Detecção avançada de fraudes
 │   │   │   ├── consistency.py  # Verificações de consistência
+│   │   │   ├── cryptocurrency.py # Análise de criptoativos (IN 1888/2019) 🆕
 │   │   │   ├── deductions.py   # Verificações de deduções
 │   │   │   ├── investment_optimization.py # Otimização de investimentos 🆕
 │   │   │   ├── optimization.py # Sugestões de otimização fiscal
