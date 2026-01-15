@@ -1,9 +1,15 @@
 """Tax constants and limits for IRPF optimization analysis.
 
-Values are based on Brazilian Federal Revenue (Receita Federal) rules for 2025.
+Values are based on Brazilian Federal Revenue (Receita Federal) rules.
+
+For IRPF 2026 (ano-calendario 2025):
+- Law 15.270/2025: New exemption for income up to R$ 5,000/month
+- Progressive reduction for income R$ 5,000 to R$ 7,350/month
+
 Sources:
 - https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/tabelas/2025
 - https://agenciabrasil.ebc.com.br/economia/noticia/2025-04/ir-2025-saiba-como-incluir-dependentes-e-deduzir-despesas
+- https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2025/dezembro/receita-federal-orienta-fontes-pagadoras-e-contribuintes-a-calcular-a-reducao-do-imposto-de-renda-a-partir-de-1o-de-janeiro-de-2026
 """
 
 from decimal import Decimal
@@ -98,6 +104,28 @@ FAIXAS_IR_ANUAL = [
 # Maximum marginal rate (for potential savings calculations)
 ALIQUOTA_MAXIMA = Decimal("0.275")
 
+# === IRPF 2026 Reform (Lei 15.270/2025) ===
+# New exemption and reduction rules effective January 1, 2026
+
+# Monthly exemption limit (full exemption up to this amount)
+ISENCAO_MENSAL_2026 = Decimal("5000")
+# Annual exemption limit
+ISENCAO_ANUAL_2026 = Decimal("60000")
+
+# Reduction zone upper limit (gradual reduction between exemption and this)
+REDUCAO_MENSAL_LIMITE_2026 = Decimal("7350")
+REDUCAO_ANUAL_LIMITE_2026 = Decimal("88200")
+
+# Maximum monthly reduction value (R$ 312.89)
+REDUCAO_MAXIMA_MENSAL_2026 = Decimal("312.89")
+
+# High income minimum tax (IRPFM) thresholds
+# Above R$ 600k/year: progressive minimum tax up to 10%
+LIMITE_IRPFM = Decimal("600000")
+# Above R$ 1.2M/year: minimum effective rate of 10%
+LIMITE_IRPFM_MAXIMO = Decimal("1200000")
+ALIQUOTA_IRPFM_MAXIMA = Decimal("0.10")
+
 # === Minimum thresholds for suggestions ===
 
 # Minimum income for PGBL suggestion (below this, likely uses simplified)
@@ -108,6 +136,23 @@ ECONOMIA_MINIMA_SUGESTAO = Decimal("100")
 
 # Minimum PGBL space to suggest (avoid suggesting tiny amounts)
 ESPACO_MINIMO_PGBL = Decimal("1000")
+
+# === Declaration Obligation Thresholds (IRPF 2026) ===
+
+# Minimum taxable income requiring declaration (ano-base 2025)
+OBRIGATORIEDADE_RENDIMENTOS_TRIBUTAVEIS = Decimal("33888")
+
+# Minimum exempt income requiring declaration
+OBRIGATORIEDADE_RENDIMENTOS_ISENTOS = Decimal("200000")
+
+# Minimum patrimony requiring declaration
+OBRIGATORIEDADE_PATRIMONIO = Decimal("800000")
+
+# Minimum capital gains requiring declaration
+OBRIGATORIEDADE_GANHO_CAPITAL = Decimal("0")  # Any capital gain
+
+# Minimum rural revenue requiring declaration
+OBRIGATORIEDADE_RECEITA_RURAL = Decimal("169440")
 
 # === Sanity check limits ===
 
