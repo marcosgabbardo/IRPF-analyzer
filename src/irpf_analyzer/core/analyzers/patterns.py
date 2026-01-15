@@ -68,6 +68,59 @@ class PatternAnalyzer:
         self.declaration = declaration
         self.inconsistencies: list[Inconsistency] = []
         self.warnings: list[Warning] = []
+        # Cached filtered data for performance
+        self._despesas_medicas: list | None = None
+        self._valores_deducao: list[Decimal] | None = None
+        self._imoveis: list | None = None
+        self._veiculos: list | None = None
+        self._participacoes: list | None = None
+
+    @property
+    def despesas_medicas(self) -> list:
+        """Cached list of medical expenses."""
+        if self._despesas_medicas is None:
+            self._despesas_medicas = [
+                d for d in self.declaration.deducoes
+                if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
+            ]
+        return self._despesas_medicas
+
+    @property
+    def valores_deducao(self) -> list[Decimal]:
+        """Cached list of deduction values."""
+        if self._valores_deducao is None:
+            self._valores_deducao = [d.valor for d in self.declaration.deducoes if d.valor > 0]
+        return self._valores_deducao
+
+    @property
+    def imoveis(self) -> list:
+        """Cached list of real estate assets."""
+        if self._imoveis is None:
+            self._imoveis = [
+                b for b in self.declaration.bens_direitos
+                if b.codigo in self.CODIGOS_IMOVEIS and b.situacao_atual > 0
+            ]
+        return self._imoveis
+
+    @property
+    def veiculos(self) -> list:
+        """Cached list of vehicle assets."""
+        if self._veiculos is None:
+            self._veiculos = [
+                b for b in self.declaration.bens_direitos
+                if b.codigo in self.CODIGOS_VEICULOS
+            ]
+        return self._veiculos
+
+    @property
+    def participacoes(self) -> list:
+        """Cached list of equity participations."""
+        if self._participacoes is None:
+            self._participacoes = [
+                b for b in self.declaration.bens_direitos
+                if b.codigo in self.CODIGOS_PARTICIPACOES and b.situacao_atual > 0
+            ]
+        return self._participacoes
 
     def analyze(self) -> tuple[list[Inconsistency], list[Warning]]:
         """Run all pattern checks.
@@ -153,11 +206,11 @@ class PatternAnalyzer:
         - Unreported sale
         - Incorrect valuation
         """
-        for bem in self.declaration.bens_direitos:
-            # Vehicles are identified by codigo 21-29 (not grupo)
-            # The DEC file stores codigo, not grupo directly
-            if bem.codigo not in self.CODIGOS_VEICULOS:
-                continue
+        # Early return if no vehicles
+        if not self.veiculos:
+            return
+
+        for bem in self.veiculos:
 
             # Skip if no previous value (new vehicle)
             if bem.situacao_anterior <= 0:
@@ -217,21 +270,17 @@ class PatternAnalyzer:
         - Personal relationship with provider
         - Inflated values
         """
-        despesas_medicas = [
-            d for d in self.declaration.deducoes
-            if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
-        ]
-
-        if len(despesas_medicas) < 2:
+        # Use cached property
+        if len(self.despesas_medicas) < 2:
             return  # Need at least 2 for concentration check
 
-        total = sum(d.valor for d in despesas_medicas)
+        total = sum(d.valor for d in self.despesas_medicas)
         if total == 0:
             return
 
         # Group by provider CNPJ
         por_prestador: dict[str, Decimal] = {}
-        for d in despesas_medicas:
+        for d in self.despesas_medicas:
             cnpj = d.cnpj_prestador or "SEM_CNPJ"
             por_prestador[cnpj] = por_prestador.get(cnpj, Decimal("0")) + d.valor
 
@@ -258,40 +307,35 @@ class PatternAnalyzer:
         If taxpayer owns multiple properties but declares no rental income,
         it may indicate income omission.
         """
-        # Count real estate properties by codigo 11-19 (not grupo)
-        # The DEC file stores codigo, the grupo shown in IRPF is computed
-        imoveis = [
-            b for b in self.declaration.bens_direitos
-            if b.codigo in self.CODIGOS_IMOVEIS and b.situacao_atual > 0
-        ]
+        # Use cached property - if more than 1 property, check for rental income
+        if len(self.imoveis) <= 1:
+            return
 
-        # If more than 1 property, check for rental income
-        if len(imoveis) > 1:
-            # Check for rental income in rendimentos
-            renda_aluguel = Decimal("0")
-            for r in self.declaration.rendimentos:
-                if r.tipo == TipoRendimento.ALUGUEIS:
-                    renda_aluguel += r.valor_anual
-                elif r.descricao and (
-                    "ALUGUEL" in r.descricao.upper() or "LOCAÇÃO" in r.descricao.upper()
-                ):
-                    renda_aluguel += r.valor_anual
+        # Check for rental income in rendimentos
+        renda_aluguel = Decimal("0")
+        for r in self.declaration.rendimentos:
+            if r.tipo == TipoRendimento.ALUGUEIS:
+                renda_aluguel += r.valor_anual
+            elif r.descricao and (
+                "ALUGUEL" in r.descricao.upper() or "LOCAÇÃO" in r.descricao.upper()
+            ):
+                renda_aluguel += r.valor_anual
 
-            if renda_aluguel == 0:
-                valor_total_imoveis = sum(i.situacao_atual for i in imoveis)
-                self.warnings.append(
-                    Warning(
-                        mensagem=(
-                            f"Contribuinte possui {len(imoveis)} imóveis "
-                            f"(R$ {valor_total_imoveis:,.2f}) mas não declara renda de "
-                            f"aluguel. Verifique se há imóveis alugados não declarados."
-                        ),
-                        risco=RiskLevel.LOW,
-                        campo="bens_direitos",
-                        categoria=WarningCategory.PADRAO,
-                        informativo=True,  # Informative, doesn't count in score
-                    )
+        if renda_aluguel == 0:
+            valor_total_imoveis = sum(i.situacao_atual for i in self.imoveis)
+            self.warnings.append(
+                Warning(
+                    mensagem=(
+                        f"Contribuinte possui {len(self.imoveis)} imóveis "
+                        f"(R$ {valor_total_imoveis:,.2f}) mas não declara renda de "
+                        f"aluguel. Verifique se há imóveis alugados não declarados."
+                    ),
+                    risco=RiskLevel.LOW,
+                    campo="bens_direitos",
+                    categoria=WarningCategory.PADRAO,
+                    informativo=True,  # Informative, doesn't count in score
                 )
+            )
 
     # ========================
     # FRAUD PATTERNS
@@ -376,16 +420,12 @@ class PatternAnalyzer:
         - Expenses on weekends/holidays (if date available)
         - CNPJs of companies unrelated to health
         """
-        despesas_medicas = [
-            d for d in self.declaration.deducoes
-            if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
-        ]
-
-        if len(despesas_medicas) < 3:
+        # Use cached property
+        if len(self.despesas_medicas) < 3:
             return
 
         # Check for identical values
-        valores = [d.valor for d in despesas_medicas]
+        valores = [d.valor for d in self.despesas_medicas]
         contagem = Counter(valores)
 
         for valor, count in contagem.items():
@@ -572,12 +612,9 @@ class PatternAnalyzer:
         If small participation is declared but high dividends are received,
         may indicate inconsistency.
         """
-        # Identify equity participations by codigo 31, 32, 39 (not grupo)
-        # The DEC file stores codigo, the grupo shown in IRPF is computed
-        participacoes = [
-            b for b in self.declaration.bens_direitos
-            if b.codigo in self.CODIGOS_PARTICIPACOES and b.situacao_atual > 0
-        ]
+        # Early return if no equity participations
+        if not self.participacoes:
+            return
 
         # Identify dividends received
         dividendos = Decimal("0")
@@ -589,10 +626,10 @@ class PatternAnalyzer:
             ):
                 dividendos += r.valor_anual
 
-        if not participacoes or dividendos == 0:
+        if dividendos == 0:
             return
 
-        total_participacoes = sum(p.situacao_atual for p in participacoes)
+        total_participacoes = sum(p.situacao_atual for p in self.participacoes)
 
         # If dividends > 30% of participation value, may be inconsistent
         if total_participacoes > 0 and dividendos > total_participacoes * Decimal("0.30"):
@@ -726,27 +763,25 @@ class PatternAnalyzer:
         Z-score is more sensitive than IQR for normally distributed data.
         Values with |z| > 3 are statistically very unusual (0.3% probability).
         """
-        # Medical expenses - commonly manipulated
-        despesas_medicas = [
-            d.valor for d in self.declaration.deducoes
-            if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
-        ]
+        # Use cached property - medical expenses are commonly manipulated
+        if len(self.despesas_medicas) < 5:
+            return
 
-        if len(despesas_medicas) >= 5:
-            outliers = detectar_outliers_zscore(despesas_medicas)
-            for valor, zscore in outliers:
-                self.warnings.append(
-                    Warning(
-                        mensagem=(
-                            f"Despesa médica com valor estatisticamente extremo "
-                            f"(z-score={zscore:.1f}): R$ {valor:,.2f}"
-                        ),
-                        risco=RiskLevel.MEDIUM,
-                        campo="deducoes",
-                        categoria=WarningCategory.PADRAO,
-                        valor_impacto=valor,
-                    )
+        valores_medicos = [d.valor for d in self.despesas_medicas]
+        outliers = detectar_outliers_zscore(valores_medicos)
+        for valor, zscore in outliers:
+            self.warnings.append(
+                Warning(
+                    mensagem=(
+                        f"Despesa médica com valor estatisticamente extremo "
+                        f"(z-score={zscore:.1f}): R$ {valor:,.2f}"
+                    ),
+                    risco=RiskLevel.MEDIUM,
+                    campo="deducoes",
+                    categoria=WarningCategory.PADRAO,
+                    valor_impacto=valor,
                 )
+            )
 
     def _check_duplicate_deductions(self) -> None:
         """Detect duplicate or near-duplicate deduction values.
@@ -927,16 +962,12 @@ class PatternAnalyzer:
         - Provider type distribution (PF vs PJ)
         - Value distribution (statistical analysis)
         """
-        despesas_medicas = [
-            d for d in self.declaration.deducoes
-            if d.tipo == TipoDeducao.DESPESAS_MEDICAS and d.valor > 0
-        ]
-
-        if len(despesas_medicas) < 3:
+        # Use cached property
+        if len(self.despesas_medicas) < 3:
             return
 
         # Check coefficient of variation
-        valores = [d.valor for d in despesas_medicas]
+        valores = [d.valor for d in self.despesas_medicas]
         cv = calcular_coeficiente_variacao(valores)
 
         if cv < Decimal("10"):
@@ -960,7 +991,7 @@ class PatternAnalyzer:
         pf_valor = Decimal("0")
         pj_valor = Decimal("0")
 
-        for d in despesas_medicas:
+        for d in self.despesas_medicas:
             if d.cpf_prestador:
                 pf_count += 1
                 pf_valor += d.valor
